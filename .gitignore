@@ -1,0 +1,143 @@
+# =========================
+
+# Python
+
+# =========================
+
+**pycache**/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Distribution / packaging
+
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+
+.venv/
+venv/
+env/
+ENV/
+
+# =========================
+
+# Conda
+
+# =========================
+
+# Do not commit local envs
+
+.env
+.env.*
+*.conda
+conda-meta/
+
+# =========================
+
+# PyCharm / IDE
+
+# =========================
+
+.idea/
+*.iml
+
+# VSCode (if you ever use it)
+
+.vscode/
+
+# =========================
+
+# macOS
+
+# =========================
+
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# =========================
+
+# Logs
+
+# =========================
+
+logs/
+*.log
+
+# =========================
+
+# Testing / coverage
+
+# =========================
+
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# =========================
+
+# Type checking
+
+# =========================
+
+.pyright/
+.mypy_cache/
+
+# =========================
+
+# Ruff
+
+# =========================
+
+.ruff_cache/
+
+# =========================
+
+# Data (IMPORTANT)
+
+# =========================
+
+# Ignore raw and processed data
+
+data/raw/
+data/interim/
+data/processed/
+
+# But keep structure
+
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+
+# =========================
+
+# Config overrides / secrets
+
+# =========================
+
+configs/local.yaml
+configs/*.secret.yaml
+
+# =========================
+
+# Jupyter (if used later)
+
+# =========================
+
+.ipynb_checkpoints/
+
+# =========================
+
+# Misc
+
+# =========================
+
+*.tmp
+*.swp
+*~
