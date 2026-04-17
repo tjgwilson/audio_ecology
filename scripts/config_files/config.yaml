@@ -1,0 +1,20 @@
+input_dir: data/raw/
+output_dir: data/processed/
+site_name: Canny Woods
+
+fallback_location:
+  latitude: 50.432000
+  longitude: -3.672000
+
+devices:
+  24F319046907737B:
+    label: audiomoth_1
+    fallback_location:
+      latitude: 50.432584
+      longitude: -3.672039
+
+  24F319046907737C:
+    label: audiomoth_2
+
+analyses:
+  - inventory
