@@ -149,7 +149,7 @@ def extract_temperature_int(
 def extract_wav_properties(
     file_path: Path,
 ) -> tuple[int | None, float | None, bool, str | None]:
-    """Extract basic WAV properties.
+    """Extract basic WAV properties and perform a simple readability check.
 
     :param file_path: Path to the WAV file.
     :return: Sample rate, duration, readable flag, and optional note.
@@ -161,6 +161,9 @@ def extract_wav_properties(
             duration_s = (
                 frame_count / sample_rate_hz if sample_rate_hz > 0 else None
             )
+
+            _ = wav_handle.readframes(min(frame_count, 1024))
+
         return sample_rate_hz, duration_s, True, None
     except (wave.Error, OSError) as exc:
         return None, None, False, f'WAV read failed: {exc}'
