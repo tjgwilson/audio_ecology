@@ -9,3 +9,6 @@ dependencies = []
 
 [tool.ruff]
 line-length = 88
+
+[project.scripts]
+audio-ecology = "audio_ecology.cli:app"
