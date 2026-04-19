@@ -37,9 +37,10 @@ def test_run_inventory_pipeline_returns_summary(tmp_path: Path) -> None:
         },
     )
 
-    inventory_df, summary = run_inventory_pipeline(config)
+    inventory_df, chunk_df, summary = run_inventory_pipeline(config)
 
     assert inventory_df.height == 1
+    assert chunk_df is None
     assert summary['n_files'] == 1
     assert summary['n_unreadable_wav'] == 0
     assert summary['n_missing_timestamp'] == 0

@@ -32,13 +32,19 @@ def inventory(
 ) -> None:
     """Build an inventory of WAV files from a config file."""
     config = load_config(config_path.resolve())
-
-    inventory_df, summary = run_inventory_pipeline(config=config, stem=stem)
+    inventory_df, chunk_df, summary = run_inventory_pipeline(
+        config=config,
+        stem=stem,
+    )
 
     typer.echo(
         f'Wrote inventory with {inventory_df.height} files to '
         f'{config.output_dir}'
     )
+
+    if chunk_df is not None:
+        typer.echo(f'Wrote chunk inventory with {chunk_df.height} chunks')
+
     typer.echo('')
     typer.echo(format_inventory_summary(summary))
 
