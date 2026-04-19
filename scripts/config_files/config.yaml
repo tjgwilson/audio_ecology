@@ -16,5 +16,13 @@ devices:
   24F319046907737C:
     label: audiomoth_2
 
+chunking:
+  enabled: true
+  duration_s: 3.0
+  overlap_s: 1.0
+  write_chunk_inventory: true
+  write_audio_files: true
+  output_dir: data/interim/chunks
+
 analyses:
   - inventory

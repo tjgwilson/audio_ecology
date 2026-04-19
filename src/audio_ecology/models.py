@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel
-
+from pydantic import BaseModel, Field
 
 TimestampSource = Literal['guano', 'filename', 'missing']
 LocationSource = Literal['guano', 'device_config', 'site_config', 'missing']
@@ -38,3 +37,32 @@ class AudioFileRecord(BaseModel):
     guano_present: bool = False
     readable_wav: bool = True
     notes: str | None = None
+
+
+class AudioChunkRecord(BaseModel):
+    """Canonical record for one derived analysis chunk."""
+
+    parent_file_path: Path
+    parent_file_name: str
+    chunk_file_path: Path | None = None
+    device_id: str | None = None
+    device_label: str | None = None
+
+    chunk_index: int
+    chunk_start_s: float
+    chunk_end_s: float
+    chunk_duration_s: float
+
+    timestamp: datetime | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+
+    sample_rate_hz: int | None = None
+    analysis_targets: list[str] = Field(default_factory=list)
+
+    @property
+    def chunk_timestamp(self) -> datetime | None:
+        """Return absolute timestamp for the chunk start if available."""
+        if self.timestamp is None:
+            return None
+        return self.timestamp + timedelta(seconds=self.chunk_start_s)

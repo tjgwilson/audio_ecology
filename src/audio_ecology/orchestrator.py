@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 import polars as pl
+from polars import Series
 
 from audio_ecology.config import PipelineConfig
 from audio_ecology.ingest.inventory import build_and_write_inventory
@@ -72,16 +73,16 @@ def summarise_inventory(inventory_df: pl.DataFrame) -> dict[str, object]:
 def run_inventory_pipeline(
     config: PipelineConfig,
     stem: str = 'audio_inventory',
-) -> tuple[pl.DataFrame, dict[str, object]]:
+) -> tuple[Series, Series, dict[str, object]]:
     """Run the inventory pipeline and return data plus summary.
 
     :param config: Pipeline configuration.
     :param stem: Base output file stem.
     :return: Inventory DataFrame and summary.
     """
-    inventory_df = build_and_write_inventory(config=config, stem=stem)
+    inventory_df, chunk_df = build_and_write_inventory(config=config, stem=stem)
     summary = summarise_inventory(inventory_df)
-    return inventory_df, summary
+    return inventory_df, chunk_df, summary
 
 
 def format_inventory_summary(summary: Mapping[str, object]) -> str:

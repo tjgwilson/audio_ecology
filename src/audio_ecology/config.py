@@ -22,6 +22,33 @@ class DeviceConfig(BaseModel):
     fallback_location: LocationConfig | None = None
 
 
+class ChunkingConfig(BaseModel):
+    """Configuration for optional audio chunking."""
+
+    enabled: bool = False
+    duration_s: float = 3.0
+    overlap_s: float = 0.0
+    write_chunk_inventory: bool = True
+    write_audio_files: bool = False
+    output_dir: Path | None = None
+
+    @model_validator(mode='after')
+    def validate_chunking(self) -> 'ChunkingConfig':
+        """Validate chunking settings."""
+        if self.duration_s <= 0:
+            raise ValueError('chunking.duration_s must be greater than 0')
+
+        if self.overlap_s < 0:
+            raise ValueError('chunking.overlap_s must be non-negative')
+
+        if self.overlap_s >= self.duration_s:
+            raise ValueError(
+                'chunking.overlap_s must be smaller than chunking.duration_s'
+            )
+
+        return self
+
+
 class PipelineConfig(BaseModel):
     """Top level pipeline configuration."""
 
@@ -32,6 +59,7 @@ class PipelineConfig(BaseModel):
     fallback_location: LocationConfig | None = None
     devices: dict[str, DeviceConfig] = Field(default_factory=dict)
     analyses: list[str] = Field(default_factory=list)
+    chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
 
     @model_validator(mode='after')
     def resolve_paths(self) -> 'PipelineConfig':
@@ -43,6 +71,14 @@ class PipelineConfig(BaseModel):
 
         if not self.output_dir.is_absolute():
             self.output_dir = (self.project_root / self.output_dir).resolve()
+
+        if (
+            self.chunking.output_dir is not None
+            and not self.chunking.output_dir.is_absolute()
+        ):
+            self.chunking.output_dir = (
+                self.project_root / self.chunking.output_dir
+            ).resolve()
 
         return self
 
