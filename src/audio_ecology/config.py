@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import yaml
 from pydantic import BaseModel, Field, model_validator
+
+logger = logging.getLogger(__name__)
 
 
 class LocationConfig(BaseModel):
@@ -31,6 +34,7 @@ class ChunkingConfig(BaseModel):
     write_chunk_inventory: bool = True
     write_audio_files: bool = False
     output_dir: Path | None = None
+    analysis_targets: list[str] = Field(default_factory=list)
 
     @model_validator(mode='after')
     def validate_chunking(self) -> 'ChunkingConfig':
@@ -52,7 +56,6 @@ class ChunkingConfig(BaseModel):
 class BirdNETConfig(BaseModel):
     """Configuration for BirdNET bird detection."""
 
-    enabled: bool = False
     output_dir: Path | None = None
     model_version: str = '2.4'
     model_backend: str = 'tf'
@@ -95,7 +98,6 @@ class PipelineConfig(BaseModel):
     site_name: str
     fallback_location: LocationConfig | None = None
     devices: dict[str, DeviceConfig] = Field(default_factory=dict)
-    analyses: list[str] = Field(default_factory=list)
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
     birdnet: BirdNETConfig = Field(default_factory=BirdNETConfig)
 
@@ -168,6 +170,7 @@ def load_config(
     :raises FileNotFoundError: If the config file does not exist.
     :raises ValueError: If the YAML root is not a mapping.
     """
+    logger.info('Loading config from %s', config_path)
     if not config_path.exists():
         raise FileNotFoundError(f'Config file not found: {config_path}')
 
@@ -177,6 +180,21 @@ def load_config(
     if not isinstance(raw_config, dict):
         raise ValueError('Config file must contain a top-level mapping.')
 
+    if 'analyses' in raw_config:
+        raise ValueError(
+            'Top-level "analyses" is no longer used. Choose what runs with '
+            'the CLI command, such as "inventory" or "birds". If you need '
+            'labels on chunk records, use "chunking.analysis_targets".'
+        )
+
+    birdnet_config = raw_config.get('birdnet')
+    if isinstance(birdnet_config, dict) and 'enabled' in birdnet_config:
+        raise ValueError(
+            '"birdnet.enabled" is no longer used. Run the "birds" command to '
+            'perform BirdNET analysis; keep the birdnet config block for '
+            'BirdNET parameters only.'
+        )
+
     resolved_project_root = (
         project_root.resolve()
         if project_root is not None
@@ -185,4 +203,11 @@ def load_config(
 
     raw_config['project_root'] = resolved_project_root
 
-    return PipelineConfig.model_validate(raw_config)
+    config = PipelineConfig.model_validate(raw_config)
+    logger.info(
+        'Loaded config for site %s: input=%s output=%s',
+        config.site_name,
+        config.input_dir,
+        config.output_dir,
+    )
+    return config

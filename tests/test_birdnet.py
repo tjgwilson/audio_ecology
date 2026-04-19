@@ -58,9 +58,7 @@ def make_config(tmp_path: Path) -> PipelineConfig:
             longitude=-2.1,
         ),
         devices={},
-        analyses=['inventory', 'birds'],
         birdnet=BirdNETConfig(
-            enabled=True,
             output_dir=tmp_path / 'processed' / 'birdnet',
             model_version='2.4',
             model_backend='tf',

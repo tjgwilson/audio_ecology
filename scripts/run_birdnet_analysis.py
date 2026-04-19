@@ -12,6 +12,7 @@ from audio_ecology.analysis.birdnet import (
     run_birdnet_analysis,
 )
 from audio_ecology.config import load_config
+from audio_ecology.logging_config import configure_logging
 
 
 def parse_args() -> argparse.Namespace:
@@ -31,12 +32,18 @@ def parse_args() -> argparse.Namespace:
         default='audio_inventory',
         help='Inventory file stem in the configured output directory.',
     )
+    parser.add_argument(
+        '--log-level',
+        default='INFO',
+        help='Logging level: INFO or DEBUG.',
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     """Run BirdNET analysis from the configured inventory parquet."""
     args = parse_args()
+    configure_logging(args.log_level)
     config = load_config(args.config_path.resolve())
 
     inventory_path = config.output_dir / f'{args.inventory_stem}.parquet'

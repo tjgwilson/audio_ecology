@@ -22,7 +22,6 @@ def make_config(tmp_path: Path) -> PipelineConfig:
             longitude=-2.1,
         ),
         devices={},
-        analyses=['inventory'],
     )
 
 

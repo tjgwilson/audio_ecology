@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 import wave
 
 from audio_ecology.config import ChunkingConfig
 from audio_ecology.models import AudioChunkRecord, AudioFileRecord
+
+logger = logging.getLogger(__name__)
 
 
 def should_chunk_file(record: AudioFileRecord) -> bool:
@@ -37,6 +40,7 @@ def build_chunk_records_for_file(
     :return: Chunk records.
     """
     if not chunking_config.enabled or not should_chunk_file(record):
+        logger.debug('Skipping chunking for %s', record.file_name)
         return []
 
     duration_s = record.duration_s
@@ -78,6 +82,11 @@ def build_chunk_records_for_file(
         chunk_index += 1
         chunk_start_s += step_s
 
+    logger.debug(
+        'Built %d chunk records for %s',
+        len(chunk_records),
+        record.file_name,
+    )
     return chunk_records
 
 
@@ -93,6 +102,7 @@ def build_chunk_records(
     :param analysis_targets: Optional analysis targets for these chunks.
     :return: Chunk records.
     """
+    logger.info('Building chunk records for %d inventory files', len(records))
     chunk_records: list[AudioChunkRecord] = []
 
     for record in records:
@@ -104,6 +114,7 @@ def build_chunk_records(
             )
         )
 
+    logger.info('Built %d chunk records', len(chunk_records))
     return chunk_records
 
 
@@ -152,6 +163,7 @@ def write_chunk_wav(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     output_path = output_dir / build_chunk_file_name(chunk_record)
+    logger.debug('Writing chunk WAV to %s', output_path)
 
     with wave.open(str(chunk_record.parent_file_path), 'rb') as source_wav:
         sample_rate_hz = source_wav.getframerate()
@@ -174,6 +186,7 @@ def write_chunk_wav(
         chunk_wav.setcomptype(comptype, compname)
         chunk_wav.writeframes(chunk_frames)
 
+    logger.debug('Wrote chunk WAV to %s', output_path)
     return output_path
 
 
@@ -190,6 +203,7 @@ def write_chunk_wavs(
     :return: Updated chunk records with chunk_file_path values.
     """
     if not chunking_config.write_audio_files:
+        logger.info('Skipping physical chunk WAV writing')
         return chunk_records
 
     output_dir = get_chunk_output_dir(
@@ -198,6 +212,11 @@ def write_chunk_wavs(
     )
 
     updated_records: list[AudioChunkRecord] = []
+    logger.info(
+        'Writing %d physical chunk WAV files to %s',
+        len(chunk_records),
+        output_dir,
+    )
 
     for chunk_record in chunk_records:
         chunk_file_path = write_chunk_wav(
@@ -210,4 +229,5 @@ def write_chunk_wavs(
             )
         )
 
+    logger.info('Wrote %d physical chunk WAV files', len(updated_records))
     return updated_records
