@@ -8,10 +8,7 @@ import polars as pl
 from polars import DataFrame
 
 from audio_ecology.config import PipelineConfig
-from audio_ecology.ingest.inventory import (
-    build_and_write_inventory,
-    build_and_write_inventory_with_chunks,
-)
+from audio_ecology.ingest.inventory import build_and_write_inventory_with_chunks
 
 
 def summarise_inventory(inventory_df: pl.DataFrame) -> dict[str, object]:
@@ -76,23 +73,8 @@ def summarise_inventory(inventory_df: pl.DataFrame) -> dict[str, object]:
 def run_inventory_pipeline(
     config: PipelineConfig,
     stem: str = 'audio_inventory',
-) -> tuple[DataFrame, dict[str, object]]:
-    """Run the inventory pipeline and return data plus summary.
-
-    :param config: Pipeline configuration.
-    :param stem: Base output file stem.
-    :return: Inventory DataFrame and summary.
-    """
-    inventory_df = build_and_write_inventory(config=config, stem=stem)
-    summary = summarise_inventory(inventory_df)
-    return inventory_df, summary
-
-
-def run_inventory_pipeline_with_chunks(
-    config: PipelineConfig,
-    stem: str = 'audio_inventory',
 ) -> tuple[DataFrame, DataFrame | None, dict[str, object]]:
-    """Run the inventory pipeline with optional chunk output.
+    """Run the inventory pipeline and return data plus summary.
 
     :param config: Pipeline configuration.
     :param stem: Base output file stem.
