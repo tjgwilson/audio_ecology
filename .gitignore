@@ -21,8 +21,10 @@ dist/
 
 .venv/
 venv/
-env/
-ENV/
+env/*
+ENV/*
+!env/
+!env/environment.yml
 
 # =========================
 
