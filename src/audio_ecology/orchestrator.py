@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import logging
 
 import polars as pl
 from polars import DataFrame
 
 from audio_ecology.config import PipelineConfig
 from audio_ecology.ingest.inventory import build_and_write_inventory_with_chunks
+
+logger = logging.getLogger(__name__)
 
 
 def summarise_inventory(inventory_df: pl.DataFrame) -> dict[str, object]:
@@ -80,11 +83,17 @@ def run_inventory_pipeline(
     :param stem: Base output file stem.
     :return: Inventory DataFrame, optional chunk DataFrame, and summary.
     """
+    logger.info('Running inventory pipeline')
     inventory_df, chunk_df = build_and_write_inventory_with_chunks(
         config=config,
         stem=stem,
     )
     summary = summarise_inventory(inventory_df)
+    logger.info(
+        'Inventory pipeline complete: %s files, %s chunk rows',
+        summary['n_files'],
+        0 if chunk_df is None else chunk_df.height,
+    )
     return inventory_df, chunk_df, summary
 
 

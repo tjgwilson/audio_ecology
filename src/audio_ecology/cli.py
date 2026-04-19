@@ -12,6 +12,7 @@ from audio_ecology.analysis.birdnet import (
     run_birdnet_analysis,
 )
 from audio_ecology.config import load_config
+from audio_ecology.logging_config import configure_logging
 from audio_ecology.orchestrator import (
     format_inventory_summary,
     run_inventory_pipeline,
@@ -33,8 +34,16 @@ def inventory(
             help='Base file stem for inventory outputs.',
         ),
     ] = 'audio_inventory',
+    log_level: Annotated[
+        str,
+        typer.Option(
+            '--log-level',
+            help='Logging level: INFO or DEBUG.',
+        ),
+    ] = 'INFO',
 ) -> None:
     """Build an inventory of WAV files from a config file."""
+    configure_logging(log_level)
     config = load_config(config_path.resolve())
     inventory_df, chunk_df, summary = run_inventory_pipeline(
         config=config,
@@ -66,13 +75,17 @@ def birds(
             help='Base file stem for inventory outputs.',
         ),
     ] = 'audio_inventory',
+    log_level: Annotated[
+        str,
+        typer.Option(
+            '--log-level',
+            help='Logging level: INFO or DEBUG.',
+        ),
+    ] = 'INFO',
 ) -> None:
     """Run inventory and BirdNET bird detection."""
+    configure_logging(log_level)
     config = load_config(config_path.resolve())
-    if not config.birdnet.enabled:
-        typer.echo('BirdNET analysis is disabled in the config.')
-        raise typer.Exit(code=1)
-
     inventory_df, _, summary = run_inventory_pipeline(
         config=config,
         stem=stem,

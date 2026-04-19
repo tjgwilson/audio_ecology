@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import polars as pl
@@ -16,6 +17,8 @@ from audio_ecology.ingest.discovery import discover_wav_files
 from audio_ecology.ingest.metadata import build_audio_file_record
 from audio_ecology.models import AudioChunkRecord, AudioFileRecord
 
+logger = logging.getLogger(__name__)
+
 
 def build_inventory_records(config: PipelineConfig) -> list[AudioFileRecord]:
     """Build inventory records for all WAV files in a directory tree.
@@ -24,10 +27,19 @@ def build_inventory_records(config: PipelineConfig) -> list[AudioFileRecord]:
     :return: List of inventory records.
     """
     wav_files = discover_wav_files(config.input_dir)
-    return [
-        build_audio_file_record(file_path, config)
-        for file_path in wav_files
-    ]
+    logger.info('Building inventory records for %d WAV files', len(wav_files))
+    records = []
+    for index, file_path in enumerate(wav_files, start=1):
+        logger.debug(
+            'Building inventory record %d/%d for %s',
+            index,
+            len(wav_files),
+            file_path,
+        )
+        records.append(build_audio_file_record(file_path, config))
+
+    logger.info('Built %d inventory records', len(records))
+    return records
 
 
 def records_to_polars(records: list[AudioFileRecord]) -> pl.DataFrame:
@@ -82,8 +94,10 @@ def write_inventory_outputs(
     parquet_path = output_dir / f'{stem}.parquet'
     csv_path = output_dir / f'{stem}.csv'
 
+    logger.info('Writing inventory outputs to %s and %s', parquet_path, csv_path)
     inventory_df.write_parquet(parquet_path)
     inventory_df.write_csv(csv_path)
+    logger.info('Wrote inventory outputs with %d rows', inventory_df.height)
 
     return parquet_path, csv_path
 
@@ -105,12 +119,18 @@ def write_chunk_inventory_outputs(
     parquet_path = output_dir / f'{stem}.parquet'
     csv_path = output_dir / f'{stem}.csv'
 
+    logger.info(
+        'Writing chunk inventory outputs to %s and %s',
+        parquet_path,
+        csv_path,
+    )
     chunk_df.write_parquet(parquet_path)
 
     chunk_df_for_csv = chunk_df.with_columns(
         pl.col('analysis_targets').list.join(';').alias('analysis_targets')
     )
     chunk_df_for_csv.write_csv(csv_path)
+    logger.info('Wrote chunk inventory outputs with %d rows', chunk_df.height)
 
     return parquet_path, csv_path
 
@@ -142,6 +162,7 @@ def build_and_write_inventory_with_chunks(
     :param stem: Base file name stem.
     :return: Inventory DataFrame and optional chunk DataFrame.
     """
+    logger.info('Starting inventory build for %s', config.input_dir)
     records = build_inventory_records(config)
     inventory_df = records_to_polars(records)
     write_inventory_outputs(
@@ -152,10 +173,11 @@ def build_and_write_inventory_with_chunks(
 
     chunk_df: pl.DataFrame | None = None
     if config.chunking.enabled:
+        logger.info('Chunking is enabled')
         chunk_records = build_chunk_records(
             records=records,
             chunking_config=config.chunking,
-            analysis_targets=config.analyses,
+            analysis_targets=config.chunking.analysis_targets,
         )
 
         chunk_records = write_chunk_wavs(
@@ -171,5 +193,8 @@ def build_and_write_inventory_with_chunks(
                 output_dir=config.output_dir,
                 stem='audio_chunks',
             )
+    else:
+        logger.info('Chunking is disabled')
 
+    logger.info('Finished inventory build')
     return inventory_df, chunk_df

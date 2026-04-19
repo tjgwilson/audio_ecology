@@ -43,7 +43,6 @@ def make_config(tmp_path: Path) -> PipelineConfig:
                 ),
             )
         },
-        analyses=['inventory'],
     )
 
 
@@ -126,7 +125,6 @@ def test_build_audio_file_record_falls_back_to_site_location(
             longitude=-2.1,
         ),
         devices={},
-        analyses=['inventory'],
     )
 
     wav_path = create_test_wav(
@@ -152,7 +150,6 @@ def test_build_audio_file_record_handles_missing_guano_and_bad_filename(
         output_dir=tmp_path / 'processed',
         site_name='Test Site',
         devices={},
-        analyses=[],
     )
 
     wav_path = create_test_wav(tmp_path / 'raw' / 'not_a_standard_name.WAV')

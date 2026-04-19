@@ -17,15 +17,16 @@ devices:
     label: audiomoth_2
 
 chunking:
-  enabled: False
+  enabled: false
   duration_s: 3.0
   overlap_s: 1.0
   write_chunk_inventory: true
   write_audio_files: true
   output_dir: data/interim/chunks
+  analysis_targets:
+    - bird
 
 birdnet:
-  enabled: False
   output_dir: data/processed/birdnet
   model_version: "2.4"
   model_backend: tf
@@ -35,6 +36,3 @@ birdnet:
   fmax_hz: 15000.0
   sensitivity: 1.0
   overlap_s: 0.0
-
-analyses:
-  - inventory

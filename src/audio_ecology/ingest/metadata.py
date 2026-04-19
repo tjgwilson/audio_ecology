@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
 from pathlib import Path
 import wave
 
@@ -22,6 +23,8 @@ from audio_ecology.constants import (
     TIMESTAMP_SOURCE_MISSING,
 )
 from audio_ecology.models import AudioFileRecord
+
+logger = logging.getLogger(__name__)
 
 
 def extract_device_id(file_name: str) -> str | None:
@@ -236,6 +239,7 @@ def build_audio_file_record(
     :param config: Pipeline configuration.
     :return: Inventory record.
     """
+    logger.debug('Building audio file record for %s', file_path)
     file_name = file_path.name
     device_id = extract_device_id(file_name)
     filename_timestamp = extract_filename_timestamp(file_name)
@@ -271,10 +275,11 @@ def build_audio_file_record(
     notes: list[str] = []
     if wav_note is not None:
         notes.append(wav_note)
+        logger.warning('WAV metadata read failed for %s: %s', file_path, wav_note)
 
     note_text = '; '.join(notes) if notes else None
 
-    return AudioFileRecord(
+    record = AudioFileRecord(
         file_path=file_path,
         file_name=file_name,
         device_id=device_id,
@@ -293,3 +298,15 @@ def build_audio_file_record(
         readable_wav=readable_wav,
         notes=note_text,
     )
+    logger.debug(
+        'Built record for %s: readable=%s sample_rate=%s duration=%s '
+        'timestamp_source=%s location_source=%s guano=%s',
+        file_name,
+        readable_wav,
+        sample_rate_hz,
+        duration_s,
+        timestamp_source,
+        location_source,
+        guano_present,
+    )
+    return record
