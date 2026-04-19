@@ -1,0 +1,14 @@
+name: audio-ecology
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.11
+  - pip
+  - polars
+  - pydantic>=2
+  - pyyaml
+  - typer
+  - pytest
+  - ruff
+  - pip:
+      - -e .
