@@ -118,12 +118,29 @@ def write_chunk_inventory_outputs(
 def build_and_write_inventory(
     config: PipelineConfig,
     stem: str = 'audio_inventory',
-) -> tuple[DataFrame, DataFrame | None]:
+) -> DataFrame:
     """Build inventory records and write them to disk.
 
     :param config: Pipeline configuration.
     :param stem: Base file name stem.
     :return: Inventory Polars DataFrame.
+    """
+    inventory_df, _ = build_and_write_inventory_with_chunks(
+        config=config,
+        stem=stem,
+    )
+    return inventory_df
+
+
+def build_and_write_inventory_with_chunks(
+    config: PipelineConfig,
+    stem: str = 'audio_inventory',
+) -> tuple[DataFrame, DataFrame | None]:
+    """Build inventory and optional chunk records, then write them to disk.
+
+    :param config: Pipeline configuration.
+    :param stem: Base file name stem.
+    :return: Inventory DataFrame and optional chunk DataFrame.
     """
     records = build_inventory_records(config)
     inventory_df = records_to_polars(records)

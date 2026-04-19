@@ -10,7 +10,7 @@ import typer
 from audio_ecology.config import load_config
 from audio_ecology.orchestrator import (
     format_inventory_summary,
-    run_inventory_pipeline,
+    run_inventory_pipeline_with_chunks,
 )
 
 app = typer.Typer(help='Passive acoustic monitoring pipeline.')
@@ -32,7 +32,7 @@ def inventory(
 ) -> None:
     """Build an inventory of WAV files from a config file."""
     config = load_config(config_path.resolve())
-    inventory_df, chunk_df, summary = run_inventory_pipeline(
+    inventory_df, chunk_df, summary = run_inventory_pipeline_with_chunks(
         config=config,
         stem=stem,
     )
