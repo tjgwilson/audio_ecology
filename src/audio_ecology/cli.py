@@ -7,6 +7,10 @@ from typing import Annotated
 
 import typer
 
+from audio_ecology.analysis.birdnet import (
+    get_birdnet_output_dir,
+    run_birdnet_analysis,
+)
 from audio_ecology.config import load_config
 from audio_ecology.orchestrator import (
     format_inventory_summary,
@@ -45,6 +49,43 @@ def inventory(
     if chunk_df is not None:
         typer.echo(f'Wrote chunk inventory with {chunk_df.height} chunks')
 
+    typer.echo('')
+    typer.echo(format_inventory_summary(summary))
+
+
+@app.command()
+def birds(
+    config_path: Annotated[
+        Path,
+        typer.Argument(help='Path to the YAML configuration file.'),
+    ],
+    stem: Annotated[
+        str,
+        typer.Option(
+            '--stem',
+            help='Base file stem for inventory outputs.',
+        ),
+    ] = 'audio_inventory',
+) -> None:
+    """Run inventory and BirdNET bird detection."""
+    config = load_config(config_path.resolve())
+    if not config.birdnet.enabled:
+        typer.echo('BirdNET analysis is disabled in the config.')
+        raise typer.Exit(code=1)
+
+    inventory_df, _, summary = run_inventory_pipeline(
+        config=config,
+        stem=stem,
+    )
+    detections_df = run_birdnet_analysis(
+        config=config,
+        inventory_df=inventory_df,
+    )
+
+    typer.echo(
+        f'Wrote BirdNET detections with {detections_df.height} rows to '
+        f'{get_birdnet_output_dir(config)}'
+    )
     typer.echo('')
     typer.echo(format_inventory_summary(summary))
 
