@@ -66,3 +66,32 @@ class AudioChunkRecord(BaseModel):
         if self.timestamp is None:
             return None
         return self.timestamp + timedelta(seconds=self.chunk_start_s)
+
+
+class BirdDetectionRecord(BaseModel):
+    """Canonical record for one BirdNET bird detection."""
+
+    file_path: Path
+    file_name: str
+    detection_start_s: float
+    detection_end_s: float
+    detection_duration_s: float
+
+    timestamp: datetime | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    temperature_int_c: float | None = None
+
+    scientific_name: str
+    common_name: str
+    confidence: float
+    analysis_backend: str = 'birdnet'
+    model_name: str | None = None
+    source_result_path: Path | None = None
+
+    @property
+    def detection_timestamp(self) -> datetime | None:
+        """Return absolute timestamp for the detection start if available."""
+        if self.timestamp is None:
+            return None
+        return self.timestamp + timedelta(seconds=self.detection_start_s)

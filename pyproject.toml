@@ -5,7 +5,17 @@ description = "Passive acoustic monitoring pipeline"
 authors = [{name = "TJGWilson"}]
 requires-python = ">=3.11"
 
-dependencies = []
+dependencies = [
+    "polars",
+    "pydantic>=2",
+    "pyyaml",
+    "typer",
+]
+
+[project.optional-dependencies]
+birds = [
+    "birdnet>=0.2.13",
+]
 
 [tool.ruff]
 line-length = 88

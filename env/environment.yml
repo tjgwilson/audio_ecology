@@ -2,13 +2,12 @@ name: audio-ecology
 channels:
   - conda-forge
 dependencies:
-  - python>=3.11
+  - python=3.11
   - pip
   - polars
   - pydantic>=2
   - pyyaml
   - typer
+  - libsndfile
   - pytest
   - ruff
-  - pip:
-      - -e .

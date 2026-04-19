@@ -49,6 +49,43 @@ class ChunkingConfig(BaseModel):
         return self
 
 
+class BirdNETConfig(BaseModel):
+    """Configuration for BirdNET bird detection."""
+
+    enabled: bool = False
+    output_dir: Path | None = None
+    model_version: str = '2.4'
+    model_backend: str = 'tf'
+    min_confidence: float = 0.25
+    batch_size: int = 1
+    fmin_hz: float = 0.0
+    fmax_hz: float = 15000.0
+    sensitivity: float = 1.0
+    overlap_s: float = 0.0
+
+    @model_validator(mode='after')
+    def validate_birdnet(self) -> 'BirdNETConfig':
+        """Validate BirdNET settings."""
+        if not 0.00001 <= self.min_confidence <= 0.99:
+            raise ValueError(
+                'birdnet.min_confidence must be between 0.00001 and 0.99'
+            )
+
+        if self.batch_size <= 0:
+            raise ValueError('birdnet.batch_size must be greater than 0')
+
+        if self.fmin_hz < 0:
+            raise ValueError('birdnet.fmin_hz must be non-negative')
+
+        if self.fmax_hz <= self.fmin_hz:
+            raise ValueError('birdnet.fmax_hz must be greater than fmin_hz')
+
+        if not 0.0 <= self.overlap_s <= 2.9:
+            raise ValueError('birdnet.overlap_s must be between 0.0 and 2.9')
+
+        return self
+
+
 class PipelineConfig(BaseModel):
     """Top level pipeline configuration."""
 
@@ -60,6 +97,7 @@ class PipelineConfig(BaseModel):
     devices: dict[str, DeviceConfig] = Field(default_factory=dict)
     analyses: list[str] = Field(default_factory=list)
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
+    birdnet: BirdNETConfig = Field(default_factory=BirdNETConfig)
 
     @model_validator(mode='after')
     def resolve_paths(self) -> 'PipelineConfig':
@@ -78,6 +116,14 @@ class PipelineConfig(BaseModel):
         ):
             self.chunking.output_dir = (
                 self.project_root / self.chunking.output_dir
+            ).resolve()
+
+        if (
+            self.birdnet.output_dir is not None
+            and not self.birdnet.output_dir.is_absolute()
+        ):
+            self.birdnet.output_dir = (
+                self.project_root / self.birdnet.output_dir
             ).resolve()
 
         return self
