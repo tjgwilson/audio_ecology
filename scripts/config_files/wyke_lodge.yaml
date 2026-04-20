@@ -1,0 +1,51 @@
+input_dir: data/raw/Wyke_lodge
+output_dir: data/processed/Wyke_lodge
+site_name: Wyke Lodge
+
+# Parquet is always written. CSV copies are optional for manual inspection.
+outputs:
+  write_csv: True
+
+# Console logs are always shown. Set write_file to true to keep timestamped
+# component logs under output_dir, usually data/processed/logs.
+logging:
+  write_file: True
+  output_dir: data/processed/Wyke_lodge/logs
+
+fallback_location:
+  latitude: 50.432000
+  longitude: -3.672000
+
+devices:
+  24F319046907737B:
+    label: audiomoth_1
+    fallback_location:
+      latitude: 50.432584
+      longitude: -3.672039
+
+chunking:
+  # The run_chunking.py component decides whether chunking runs; this block
+  # only stores chunking parameters.
+  enabled: false
+  duration_s: 3.0
+  overlap_s: 1.0
+  write_chunk_inventory: true
+  write_audio_files: true
+  output_dir: data/interim/chunks
+  analysis_targets:
+    - bird
+
+birdnet:
+  # The run_birds.py component decides whether BirdNET runs; this block only
+  # stores BirdNET parameters.
+  output_dir: data/processed/Wyke_lodge/birdnet
+  model_version: "2.4"
+  model_backend: tf
+  min_confidence: 0.25
+  use_location_filter: true
+  location_min_confidence: 0.03
+  batch_size: 1
+  fmin_hz: 0.0
+  fmax_hz: 15000.0
+  sensitivity: 1.0
+  overlap_s: 0.0
