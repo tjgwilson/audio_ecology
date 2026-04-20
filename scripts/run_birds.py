@@ -13,6 +13,7 @@ from audio_ecology.analysis.birdnet import (
 )
 from audio_ecology.config import load_config
 from audio_ecology.logging_config import configure_logging
+from audio_ecology.profiling import ProfileRecorder
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_CONFIG_PATH = SCRIPT_DIR / 'config_files' / 'config.yaml'
@@ -45,6 +46,11 @@ def parse_args() -> argparse.Namespace:
         action='store_true',
         help='Re-run files even when BirdNET checkpoints already exist.',
     )
+    parser.add_argument(
+        '--no-profile',
+        action='store_true',
+        help='Disable profiling report output.',
+    )
     return parser.parse_args()
 
 
@@ -53,6 +59,11 @@ def main() -> None:
     args = parse_args()
     configure_logging(args.log_level)
     config = load_config(args.config_path.resolve())
+    profiler = ProfileRecorder(
+        output_dir=config.output_dir,
+        run_name='birdnet_existing_inventory',
+        enabled=not args.no_profile,
+    )
 
     inventory_path = config.output_dir / f'{args.inventory_stem}.parquet'
     if not inventory_path.exists():
@@ -61,17 +72,22 @@ def main() -> None:
             'Run scripts/run_inventory.py first.'
         )
 
-    inventory_df = pl.read_parquet(inventory_path)
-    detections_df = run_birdnet_analysis(
-        config=config,
-        inventory_df=inventory_df,
-        overwrite_checkpoints=args.overwrite_checkpoints,
-    )
+    with profiler.profile('read_inventory'):
+        inventory_df = pl.read_parquet(inventory_path)
+    with profiler.profile('birdnet_analysis'):
+        detections_df = run_birdnet_analysis(
+            config=config,
+            inventory_df=inventory_df,
+            overwrite_checkpoints=args.overwrite_checkpoints,
+        )
+    profile_paths = profiler.write()
 
     print(
         f'Wrote {detections_df.height} BirdNET detections to '
         f'{get_birdnet_output_dir(config)}'
     )
+    if profile_paths is not None:
+        print(f'Wrote profile reports to {profile_paths[0].parent}')
 
 
 if __name__ == '__main__':

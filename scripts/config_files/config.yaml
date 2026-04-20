@@ -34,6 +34,8 @@ birdnet:
   model_version: "2.4"
   model_backend: tf
   min_confidence: 0.25
+  use_location_filter: true
+  location_min_confidence: 0.03
   batch_size: 1
   fmin_hz: 0.0
   fmax_hz: 15000.0

@@ -23,6 +23,7 @@ from audio_ecology.orchestrator import (
     format_inventory_summary,
     summarise_inventory,
 )
+from audio_ecology.profiling import ProfileRecorder
 
 app = typer.Typer(help='Passive acoustic monitoring pipeline.')
 
@@ -47,24 +48,41 @@ def inventory(
             help='Logging level: INFO or DEBUG.',
         ),
     ] = 'INFO',
+    profile: Annotated[
+        bool,
+        typer.Option(
+            '--profile/--no-profile',
+            help='Write profiling reports for this run.',
+        ),
+    ] = True,
 ) -> None:
     """Build an inventory of WAV files from a config file."""
     configure_logging(log_level)
     config = load_config(config_path.resolve())
-    records = build_inventory_records(config)
-    inventory_df = records_to_polars(records)
-    write_inventory_outputs(
-        inventory_df=inventory_df,
+    profiler = ProfileRecorder(
         output_dir=config.output_dir,
-        stem=stem,
-        write_csv=config.outputs.write_csv,
+        run_name='inventory',
+        enabled=profile,
     )
+    with profiler.profile('inventory'):
+        records = build_inventory_records(config)
+        inventory_df = records_to_polars(records)
+        write_inventory_outputs(
+            inventory_df=inventory_df,
+            output_dir=config.output_dir,
+            stem=stem,
+            write_csv=config.outputs.write_csv,
+        )
     summary = summarise_inventory(inventory_df)
+    profile_paths = profiler.write()
 
     typer.echo(
         f'Wrote inventory with {inventory_df.height} files to '
         f'{config.output_dir}'
     )
+
+    if profile_paths is not None:
+        typer.echo(f'Wrote profile reports to {profile_paths[0].parent}')
 
     typer.echo('')
     typer.echo(format_inventory_summary(summary))
@@ -97,6 +115,13 @@ def birds(
             help='Re-run files even when BirdNET checkpoints already exist.',
         ),
     ] = False,
+    profile: Annotated[
+        bool,
+        typer.Option(
+            '--profile/--no-profile',
+            help='Write profiling reports for this run.',
+        ),
+    ] = True,
 ) -> None:
     """Run BirdNET bird detection from an existing inventory."""
     configure_logging(log_level)
@@ -108,17 +133,27 @@ def birds(
             'Run the inventory stage first.'
         )
 
-    inventory_df = pl.read_parquet(inventory_path)
-    detections_df = run_birdnet_analysis(
-        config=config,
-        inventory_df=inventory_df,
-        overwrite_checkpoints=overwrite_checkpoints,
+    profiler = ProfileRecorder(
+        output_dir=config.output_dir,
+        run_name='birds',
+        enabled=profile,
     )
+    with profiler.profile('read_inventory'):
+        inventory_df = pl.read_parquet(inventory_path)
+    with profiler.profile('birdnet_analysis'):
+        detections_df = run_birdnet_analysis(
+            config=config,
+            inventory_df=inventory_df,
+            overwrite_checkpoints=overwrite_checkpoints,
+        )
+    profile_paths = profiler.write()
 
     typer.echo(
         f'Wrote BirdNET detections with {detections_df.height} rows to '
         f'{get_birdnet_output_dir(config)}'
     )
+    if profile_paths is not None:
+        typer.echo(f'Wrote profile reports to {profile_paths[0].parent}')
 
 
 if __name__ == '__main__':

@@ -60,6 +60,8 @@ class BirdNETConfig(BaseModel):
     model_version: str = '2.4'
     model_backend: str = 'tf'
     min_confidence: float = 0.25
+    use_location_filter: bool = True
+    location_min_confidence: float = 0.03
     batch_size: int = 1
     fmin_hz: float = 0.0
     fmax_hz: float = 15000.0
@@ -72,6 +74,11 @@ class BirdNETConfig(BaseModel):
         if not 0.00001 <= self.min_confidence <= 0.99:
             raise ValueError(
                 'birdnet.min_confidence must be between 0.00001 and 0.99'
+            )
+
+        if not 0.0 <= self.location_min_confidence <= 0.99:
+            raise ValueError(
+                'birdnet.location_min_confidence must be between 0.0 and 0.99'
             )
 
         if self.batch_size <= 0:

@@ -31,9 +31,11 @@ class FakeBirdNETModel:
 
     def __init__(self) -> None:
         self.audio_paths: list[str] = []
+        self.predict_kwargs: list[dict[str, object]] = []
 
     def predict(self, audio_path: str, **kwargs: object) -> pl.DataFrame:
         self.audio_paths.append(audio_path)
+        self.predict_kwargs.append(kwargs)
         return pl.DataFrame(
             [
                 {
@@ -52,6 +54,48 @@ class FakeBirdNETModel:
                 },
             ]
         )
+
+
+class FakeGeoPredictionResult:
+    """Small fake BirdNET geo prediction result for tests."""
+
+    def to_dataframe(self) -> pl.DataFrame:
+        return pl.DataFrame(
+            [
+                {
+                    'species_name': 'Erithacus rubecula_European Robin',
+                    'confidence': 0.812,
+                },
+                {
+                    'species_name': 'Turdus merula_Eurasian Blackbird',
+                    'confidence': 0.746,
+                },
+            ]
+        )
+
+    def to_set(self) -> set[str]:
+        return {
+            'Erithacus rubecula_European Robin',
+            'Turdus merula_Eurasian Blackbird',
+        }
+
+
+class FakeBirdNETGeoModel:
+    """Small fake BirdNET geo model for tests."""
+
+    def __init__(self) -> None:
+        self.predict_calls: list[tuple[float, float, int | None, float]] = []
+
+    def predict(
+        self,
+        latitude: float,
+        longitude: float,
+        *,
+        week: int | None = None,
+        min_confidence: float = 0.03,
+    ) -> FakeGeoPredictionResult:
+        self.predict_calls.append((latitude, longitude, week, min_confidence))
+        return FakeGeoPredictionResult()
 
 
 def make_config(tmp_path: Path) -> PipelineConfig:
@@ -151,6 +195,159 @@ def test_run_birdnet_predictions_filters_by_confidence(tmp_path: Path) -> None:
     assert predictions_df['species_name'].to_list() == [
         'Erithacus rubecula_European Robin'
     ]
+
+
+def test_run_birdnet_predictions_uses_location_species_filter(
+    tmp_path: Path,
+) -> None:
+    config = make_config(tmp_path)
+    inventory_df = make_inventory_df(tmp_path)
+    model = FakeBirdNETModel()
+    geo_model = FakeBirdNETGeoModel()
+
+    predictions_df = run_birdnet_predictions(
+        model=model,
+        inventory_df=inventory_df,
+        config=config,
+        geo_model=geo_model,
+    )
+
+    assert predictions_df.height == 1
+    assert geo_model.predict_calls == [(50.432584, -3.672039, 15, 0.03)]
+    assert model.predict_kwargs[0]['custom_species_list'] == [
+        'Erithacus rubecula_European Robin',
+        'Turdus merula_Eurasian Blackbird',
+    ]
+
+
+def test_run_birdnet_predictions_caches_location_species_filter(
+    tmp_path: Path,
+) -> None:
+    config = make_config(tmp_path)
+    inventory_df = pl.concat(
+        [
+            make_inventory_df(tmp_path),
+            make_inventory_df(tmp_path).with_columns(
+                pl.lit(
+                    str(tmp_path / 'raw' / '24F319046907737B_20260417_224541.WAV')
+                ).alias('file_path'),
+                pl.lit('24F319046907737B_20260417_224541.WAV').alias('file_name'),
+            ),
+        ]
+    )
+    model = FakeBirdNETModel()
+    geo_model = FakeBirdNETGeoModel()
+
+    run_birdnet_predictions(
+        model=model,
+        inventory_df=inventory_df,
+        config=config,
+        geo_model=geo_model,
+    )
+
+    assert len(geo_model.predict_calls) == 1
+    assert len(model.predict_kwargs) == 2
+
+
+def test_run_birdnet_predictions_writes_location_species_csv(
+    tmp_path: Path,
+) -> None:
+    config = make_config(tmp_path)
+    inventory_df = make_inventory_df(tmp_path)
+    model = FakeBirdNETModel()
+    geo_model = FakeBirdNETGeoModel()
+
+    run_birdnet_predictions(
+        model=model,
+        inventory_df=inventory_df,
+        config=config,
+        geo_model=geo_model,
+        location_species_output_dir=config.birdnet.output_dir,
+    )
+
+    species_csv_path = config.birdnet.output_dir / 'birdnet_location_species.csv'
+    species_df = pl.read_csv(species_csv_path)
+
+    assert species_csv_path.exists()
+    assert species_df.select(
+        [
+            'latitude',
+            'longitude',
+            'birdnet_week',
+            'species_name',
+            'scientific_name',
+            'common_name',
+            'location_confidence',
+        ]
+    ).to_dicts() == [
+        {
+            'latitude': 50.432584,
+            'longitude': -3.672039,
+            'birdnet_week': 15,
+            'species_name': 'Erithacus rubecula_European Robin',
+            'scientific_name': 'Erithacus rubecula',
+            'common_name': 'European Robin',
+            'location_confidence': 0.812,
+        },
+        {
+            'latitude': 50.432584,
+            'longitude': -3.672039,
+            'birdnet_week': 15,
+            'species_name': 'Turdus merula_Eurasian Blackbird',
+            'scientific_name': 'Turdus merula',
+            'common_name': 'Eurasian Blackbird',
+            'location_confidence': 0.746,
+        },
+    ]
+
+
+def test_run_birdnet_predictions_post_filters_when_model_rejects_species_list(
+    tmp_path: Path,
+) -> None:
+    class BareOnlyBirdNETModel:
+        def __init__(self) -> None:
+            self.predict_calls: list[dict[str, object]] = []
+
+        def predict(self, audio_path: str, **kwargs: object) -> pl.DataFrame:
+            self.predict_calls.append(kwargs)
+            if kwargs:
+                raise TypeError('unexpected keyword argument')
+
+            return pl.DataFrame(
+                [
+                    {
+                        'input': audio_path,
+                        'start_time': '00:00:03.00',
+                        'end_time': '00:00:06.00',
+                        'species_name': 'Erithacus rubecula_European Robin',
+                        'confidence': 0.876,
+                    },
+                    {
+                        'input': audio_path,
+                        'start_time': '00:00:06.00',
+                        'end_time': '00:00:09.00',
+                        'species_name': 'Cardinalis cardinalis_Northern Cardinal',
+                        'confidence': 0.91,
+                    },
+                ]
+            )
+
+    config = make_config(tmp_path)
+    inventory_df = make_inventory_df(tmp_path)
+    model = BareOnlyBirdNETModel()
+    geo_model = FakeBirdNETGeoModel()
+
+    predictions_df = run_birdnet_predictions(
+        model=model,
+        inventory_df=inventory_df,
+        config=config,
+        geo_model=geo_model,
+    )
+
+    assert predictions_df['species_name'].to_list() == [
+        'Erithacus rubecula_European Robin'
+    ]
+    assert model.predict_calls[-1] == {}
 
 
 def test_run_birdnet_predictions_handles_numpy_structured_array(
