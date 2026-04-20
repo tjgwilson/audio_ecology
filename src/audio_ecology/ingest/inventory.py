@@ -63,6 +63,26 @@ def chunk_records_to_polars(records: list[AudioChunkRecord]) -> pl.DataFrame:
     :param records: Inventory Records.
     :return: Polars DataFrame.
     """
+    if not records:
+        return pl.DataFrame(
+            schema={
+                'parent_file_path': pl.Utf8,
+                'parent_file_name': pl.Utf8,
+                'chunk_file_path': pl.Utf8,
+                'device_id': pl.Utf8,
+                'device_label': pl.Utf8,
+                'chunk_index': pl.Int64,
+                'chunk_start_s': pl.Float64,
+                'chunk_end_s': pl.Float64,
+                'chunk_duration_s': pl.Float64,
+                'timestamp': pl.Utf8,
+                'latitude': pl.Float64,
+                'longitude': pl.Float64,
+                'sample_rate_hz': pl.Int64,
+                'analysis_targets': pl.List(pl.Utf8),
+            }
+        )
+
     rows = []
     for record in records:
         row = record.model_dump(mode='json')

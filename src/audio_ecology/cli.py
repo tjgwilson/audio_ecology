@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
+import polars as pl
 import typer
 
 from audio_ecology.analysis.birdnet import (
@@ -12,11 +13,13 @@ from audio_ecology.analysis.birdnet import (
     run_birdnet_analysis,
 )
 from audio_ecology.config import load_config
-from audio_ecology.logging_config import configure_logging
-from audio_ecology.orchestrator import (
-    format_inventory_summary,
-    run_inventory_pipeline,
+from audio_ecology.ingest.inventory import (
+    build_inventory_records,
+    records_to_polars,
+    write_inventory_outputs,
 )
+from audio_ecology.logging_config import configure_logging
+from audio_ecology.orchestrator import format_inventory_summary, summarise_inventory
 
 app = typer.Typer(help='Passive acoustic monitoring pipeline.')
 
@@ -45,18 +48,19 @@ def inventory(
     """Build an inventory of WAV files from a config file."""
     configure_logging(log_level)
     config = load_config(config_path.resolve())
-    inventory_df, chunk_df, summary = run_inventory_pipeline(
-        config=config,
+    records = build_inventory_records(config)
+    inventory_df = records_to_polars(records)
+    write_inventory_outputs(
+        inventory_df=inventory_df,
+        output_dir=config.output_dir,
         stem=stem,
     )
+    summary = summarise_inventory(inventory_df)
 
     typer.echo(
         f'Wrote inventory with {inventory_df.height} files to '
         f'{config.output_dir}'
     )
-
-    if chunk_df is not None:
-        typer.echo(f'Wrote chunk inventory with {chunk_df.height} chunks')
 
     typer.echo('')
     typer.echo(format_inventory_summary(summary))
@@ -68,11 +72,11 @@ def birds(
         Path,
         typer.Argument(help='Path to the YAML configuration file.'),
     ],
-    stem: Annotated[
+    inventory_stem: Annotated[
         str,
         typer.Option(
-            '--stem',
-            help='Base file stem for inventory outputs.',
+            '--inventory-stem',
+            help='Inventory file stem in the configured output directory.',
         ),
     ] = 'audio_inventory',
     log_level: Annotated[
@@ -83,13 +87,17 @@ def birds(
         ),
     ] = 'INFO',
 ) -> None:
-    """Run inventory and BirdNET bird detection."""
+    """Run BirdNET bird detection from an existing inventory."""
     configure_logging(log_level)
     config = load_config(config_path.resolve())
-    inventory_df, _, summary = run_inventory_pipeline(
-        config=config,
-        stem=stem,
-    )
+    inventory_path = config.output_dir / f'{inventory_stem}.parquet'
+    if not inventory_path.exists():
+        raise typer.BadParameter(
+            f'Inventory parquet not found: {inventory_path}. '
+            'Run the inventory stage first.'
+        )
+
+    inventory_df = pl.read_parquet(inventory_path)
     detections_df = run_birdnet_analysis(
         config=config,
         inventory_df=inventory_df,
@@ -99,8 +107,6 @@ def birds(
         f'Wrote BirdNET detections with {detections_df.height} rows to '
         f'{get_birdnet_output_dir(config)}'
     )
-    typer.echo('')
-    typer.echo(format_inventory_summary(summary))
 
 
 if __name__ == '__main__':
