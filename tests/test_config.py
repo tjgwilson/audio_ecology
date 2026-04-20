@@ -118,6 +118,31 @@ def test_load_config_loads_output_preferences(tmp_path: Path) -> None:
     assert config.outputs.write_csv is True
 
 
+def test_load_config_loads_logging_preferences(tmp_path: Path) -> None:
+    project_root = tmp_path / 'repo'
+    config_dir = project_root / 'configs'
+    config_dir.mkdir(parents=True)
+
+    config_path = config_dir / 'site.yaml'
+    config_data = {
+        'input_dir': 'data/raw/site_a',
+        'output_dir': 'data/processed/site_a',
+        'site_name': 'Test Site',
+        'logging': {
+            'write_file': True,
+            'output_dir': 'data/processed/site_a/logs',
+        },
+    }
+    config_path.write_text(yaml.safe_dump(config_data), encoding='utf-8')
+
+    config = load_config(config_path, project_root=project_root)
+
+    assert config.logging.write_file is True
+    assert config.logging.output_dir == (
+        project_root / 'data/processed/site_a/logs'
+    ).resolve()
+
+
 def test_load_config_rejects_top_level_analyses(tmp_path: Path) -> None:
     project_root = tmp_path / 'repo'
     config_dir = project_root / 'configs'

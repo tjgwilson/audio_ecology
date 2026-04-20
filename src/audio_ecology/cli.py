@@ -18,7 +18,7 @@ from audio_ecology.ingest.inventory import (
     records_to_polars,
     write_inventory_outputs,
 )
-from audio_ecology.logging_config import configure_logging
+from audio_ecology.logging_config import configure_pipeline_logging
 from audio_ecology.orchestrator import (
     format_inventory_summary,
     summarise_inventory,
@@ -57,8 +57,12 @@ def inventory(
     ] = True,
 ) -> None:
     """Build an inventory of WAV files from a config file."""
-    configure_logging(log_level)
     config = load_config(config_path.resolve())
+    log_file_path = configure_pipeline_logging(
+        config=config,
+        level=log_level,
+        run_name='inventory',
+    )
     profiler = ProfileRecorder(
         output_dir=config.output_dir,
         run_name='inventory',
@@ -83,6 +87,8 @@ def inventory(
 
     if profile_paths is not None:
         typer.echo(f'Wrote profile reports to {profile_paths[0].parent}')
+    if log_file_path is not None:
+        typer.echo(f'Wrote log to {log_file_path}')
 
     typer.echo('')
     typer.echo(format_inventory_summary(summary))
@@ -124,8 +130,12 @@ def birds(
     ] = True,
 ) -> None:
     """Run BirdNET bird detection from an existing inventory."""
-    configure_logging(log_level)
     config = load_config(config_path.resolve())
+    log_file_path = configure_pipeline_logging(
+        config=config,
+        level=log_level,
+        run_name='birds',
+    )
     inventory_path = config.output_dir / f'{inventory_stem}.parquet'
     if not inventory_path.exists():
         raise typer.BadParameter(
@@ -154,6 +164,8 @@ def birds(
     )
     if profile_paths is not None:
         typer.echo(f'Wrote profile reports to {profile_paths[0].parent}')
+    if log_file_path is not None:
+        typer.echo(f'Wrote log to {log_file_path}')
 
 
 if __name__ == '__main__':

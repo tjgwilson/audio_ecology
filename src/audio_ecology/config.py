@@ -102,6 +102,13 @@ class OutputConfig(BaseModel):
     write_csv: bool = False
 
 
+class LogConfig(BaseModel):
+    """Configuration for optional log file output."""
+
+    write_file: bool = False
+    output_dir: Path | None = None
+
+
 class PipelineConfig(BaseModel):
     """Top level pipeline configuration."""
 
@@ -114,6 +121,7 @@ class PipelineConfig(BaseModel):
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
     birdnet: BirdNETConfig = Field(default_factory=BirdNETConfig)
     outputs: OutputConfig = Field(default_factory=OutputConfig)
+    logging: LogConfig = Field(default_factory=LogConfig)
 
     @model_validator(mode='after')
     def resolve_paths(self) -> 'PipelineConfig':
@@ -140,6 +148,14 @@ class PipelineConfig(BaseModel):
         ):
             self.birdnet.output_dir = (
                 self.project_root / self.birdnet.output_dir
+            ).resolve()
+
+        if (
+            self.logging.output_dir is not None
+            and not self.logging.output_dir.is_absolute()
+        ):
+            self.logging.output_dir = (
+                self.project_root / self.logging.output_dir
             ).resolve()
 
         return self

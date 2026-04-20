@@ -12,7 +12,7 @@ from audio_ecology.analysis.birdnet import (
     run_birdnet_analysis,
 )
 from audio_ecology.config import load_config
-from audio_ecology.logging_config import configure_logging
+from audio_ecology.logging_config import configure_pipeline_logging
 from audio_ecology.profiling import ProfileRecorder
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -57,8 +57,12 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     """Run BirdNET bird analysis from an existing inventory."""
     args = parse_args()
-    configure_logging(args.log_level)
     config = load_config(args.config_path.resolve())
+    log_file_path = configure_pipeline_logging(
+        config=config,
+        level=args.log_level,
+        run_name='birds',
+    )
     profiler = ProfileRecorder(
         output_dir=config.output_dir,
         run_name='birdnet_existing_inventory',
@@ -88,6 +92,8 @@ def main() -> None:
     )
     if profile_paths is not None:
         print(f'Wrote profile reports to {profile_paths[0].parent}')
+    if log_file_path is not None:
+        print(f'Wrote log to {log_file_path}')
 
 
 if __name__ == '__main__':

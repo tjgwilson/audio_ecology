@@ -5,6 +5,10 @@ site_name: Canny Woods
 outputs:
   write_csv: false
 
+logging:
+  write_file: false
+  output_dir: data/processed/logs
+
 fallback_location:
   latitude: 50.432000
   longitude: -3.672000

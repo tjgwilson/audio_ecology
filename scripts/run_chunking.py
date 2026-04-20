@@ -16,7 +16,7 @@ from audio_ecology.ingest.inventory import (
     chunk_records_to_polars,
     write_chunk_inventory_outputs,
 )
-from audio_ecology.logging_config import configure_logging
+from audio_ecology.logging_config import configure_pipeline_logging
 from audio_ecology.models import AudioFileRecord
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -64,8 +64,12 @@ def records_from_inventory_df(inventory_df: pl.DataFrame) -> list[AudioFileRecor
 def main() -> None:
     """Run the chunking stage from an existing inventory."""
     args = parse_args()
-    configure_logging(args.log_level)
     config = load_config(args.config_path.resolve())
+    log_file_path = configure_pipeline_logging(
+        config=config,
+        level=args.log_level,
+        run_name='chunking',
+    )
 
     inventory_path = config.output_dir / f'{args.inventory_stem}.parquet'
     if not inventory_path.exists():
@@ -101,6 +105,8 @@ def main() -> None:
     if csv_path is not None:
         message = f'{message} and {csv_path}'
     print(message)
+    if log_file_path is not None:
+        print(f'Wrote log to {log_file_path}')
 
 
 if __name__ == '__main__':
