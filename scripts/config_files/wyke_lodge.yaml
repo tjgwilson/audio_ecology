@@ -49,3 +49,15 @@ birdnet:
   fmax_hz: 15000.0
   sensitivity: 1.0
   overlap_s: 0.0
+
+detection_uncertainty:
+  detections_path: data/processed/Wyke_lodge/birdnet/birdnet_detections.parquet
+  output_dir: data/processed/Wyke_lodge/detection_uncertainty
+  output_stem: detection_window_evidence
+  start_time: "2026-04-20T12:35:00+00:00"
+  end_time: "2026-04-20T13:07:00+00:00"
+  event_gap_s: 30.0
+  min_confidence: 0.25
+  possible_threshold: 0.40
+  probable_threshold: 0.70
+  strong_threshold: 0.90
