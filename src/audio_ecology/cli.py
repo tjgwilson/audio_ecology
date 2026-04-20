@@ -19,7 +19,10 @@ from audio_ecology.ingest.inventory import (
     write_inventory_outputs,
 )
 from audio_ecology.logging_config import configure_logging
-from audio_ecology.orchestrator import format_inventory_summary, summarise_inventory
+from audio_ecology.orchestrator import (
+    format_inventory_summary,
+    summarise_inventory,
+)
 
 app = typer.Typer(help='Passive acoustic monitoring pipeline.')
 
@@ -86,6 +89,13 @@ def birds(
             help='Logging level: INFO or DEBUG.',
         ),
     ] = 'INFO',
+    overwrite_checkpoints: Annotated[
+        bool,
+        typer.Option(
+            '--overwrite-checkpoints',
+            help='Re-run files even when BirdNET checkpoints already exist.',
+        ),
+    ] = False,
 ) -> None:
     """Run BirdNET bird detection from an existing inventory."""
     configure_logging(log_level)
@@ -101,6 +111,7 @@ def birds(
     detections_df = run_birdnet_analysis(
         config=config,
         inventory_df=inventory_df,
+        overwrite_checkpoints=overwrite_checkpoints,
     )
 
     typer.echo(

@@ -40,6 +40,11 @@ def parse_args() -> argparse.Namespace:
         default='INFO',
         help='Logging level: INFO or DEBUG.',
     )
+    parser.add_argument(
+        '--overwrite-checkpoints',
+        action='store_true',
+        help='Re-run files even when BirdNET checkpoints already exist.',
+    )
     return parser.parse_args()
 
 
@@ -60,6 +65,7 @@ def main() -> None:
     detections_df = run_birdnet_analysis(
         config=config,
         inventory_df=inventory_df,
+        overwrite_checkpoints=args.overwrite_checkpoints,
     )
 
     print(
