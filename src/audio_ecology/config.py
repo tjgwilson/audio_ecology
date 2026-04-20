@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 import logging
 from pathlib import Path
 
@@ -96,6 +97,59 @@ class BirdNETConfig(BaseModel):
         return self
 
 
+class DetectionUncertaintyConfig(BaseModel):
+    """Configuration for window-level detection uncertainty summaries."""
+
+    detections_path: Path | None = None
+    output_dir: Path | None = None
+    output_stem: str = 'detection_window_evidence'
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    event_gap_s: float = 30.0
+    min_confidence: float = 0.25
+    possible_threshold: float = 0.40
+    probable_threshold: float = 0.70
+    strong_threshold: float = 0.90
+
+    @model_validator(mode='after')
+    def validate_detection_uncertainty(self) -> 'DetectionUncertaintyConfig':
+        """Validate detection uncertainty settings."""
+        if (
+            self.start_time is not None
+            and self.end_time is not None
+            and self.end_time <= self.start_time
+        ):
+            raise ValueError(
+                'detection_uncertainty.end_time must be after start_time'
+            )
+
+        if self.event_gap_s < 0:
+            raise ValueError('detection_uncertainty.event_gap_s must be non-negative')
+
+        if not 0.0 <= self.min_confidence <= 1.0:
+            raise ValueError(
+                'detection_uncertainty.min_confidence must be between 0.0 and 1.0'
+            )
+
+        thresholds = [
+            self.possible_threshold,
+            self.probable_threshold,
+            self.strong_threshold,
+        ]
+        if any(not 0.0 <= threshold <= 1.0 for threshold in thresholds):
+            raise ValueError(
+                'detection_uncertainty thresholds must be between 0.0 and 1.0'
+            )
+
+        if thresholds != sorted(thresholds):
+            raise ValueError(
+                'detection_uncertainty thresholds must be ordered from '
+                'possible to strong'
+            )
+
+        return self
+
+
 class OutputConfig(BaseModel):
     """Configuration for shared pipeline output formats."""
 
@@ -120,6 +174,9 @@ class PipelineConfig(BaseModel):
     devices: dict[str, DeviceConfig] = Field(default_factory=dict)
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
     birdnet: BirdNETConfig = Field(default_factory=BirdNETConfig)
+    detection_uncertainty: DetectionUncertaintyConfig = Field(
+        default_factory=DetectionUncertaintyConfig
+    )
     outputs: OutputConfig = Field(default_factory=OutputConfig)
     logging: LogConfig = Field(default_factory=LogConfig)
 
@@ -148,6 +205,22 @@ class PipelineConfig(BaseModel):
         ):
             self.birdnet.output_dir = (
                 self.project_root / self.birdnet.output_dir
+            ).resolve()
+
+        if (
+            self.detection_uncertainty.detections_path is not None
+            and not self.detection_uncertainty.detections_path.is_absolute()
+        ):
+            self.detection_uncertainty.detections_path = (
+                self.project_root / self.detection_uncertainty.detections_path
+            ).resolve()
+
+        if (
+            self.detection_uncertainty.output_dir is not None
+            and not self.detection_uncertainty.output_dir.is_absolute()
+        ):
+            self.detection_uncertainty.output_dir = (
+                self.project_root / self.detection_uncertainty.output_dir
             ).resolve()
 
         if (

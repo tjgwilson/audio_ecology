@@ -9,8 +9,14 @@ import polars as pl
 import typer
 
 from audio_ecology.analysis.birdnet import (
+    BIRDNET_DETECTIONS_STEM,
     get_birdnet_output_dir,
     run_birdnet_analysis,
+)
+from audio_ecology.analysis.evidence import (
+    DETECTION_WINDOW_EVIDENCE_STEM,
+    build_noisy_or_species_time_period,
+    write_noisy_or_species_windows,
 )
 from audio_ecology.config import load_config
 from audio_ecology.ingest.inventory import (
@@ -164,6 +170,84 @@ def birds(
     )
     if profile_paths is not None:
         typer.echo(f'Wrote profile reports to {profile_paths[0].parent}')
+    if log_file_path is not None:
+        typer.echo(f'Wrote log to {log_file_path}')
+
+
+@app.command('detection-windows')
+def detection_windows(
+    config_path: Annotated[
+        Path,
+        typer.Argument(help='Path to the YAML configuration file.'),
+    ],
+    detections_stem: Annotated[
+        str,
+        typer.Option(
+            '--detections-stem',
+            help='Detection file stem used only when no generic path is configured.',
+        ),
+    ] = BIRDNET_DETECTIONS_STEM,
+    output_stem: Annotated[
+        str,
+        typer.Option(
+            '--output-stem',
+            help='Base file stem for window evidence outputs.',
+        ),
+    ] = DETECTION_WINDOW_EVIDENCE_STEM,
+    log_level: Annotated[
+        str,
+        typer.Option(
+            '--log-level',
+            help='Logging level: INFO or DEBUG.',
+        ),
+    ] = 'INFO',
+) -> None:
+    """Aggregate detections into window-level noisy-OR evidence."""
+    config = load_config(config_path.resolve())
+    if (
+        config.detection_uncertainty.start_time is None
+        or config.detection_uncertainty.end_time is None
+    ):
+        raise typer.BadParameter(
+            'Set detection_uncertainty.start_time and '
+            'detection_uncertainty.end_time in the config.'
+        )
+
+    log_file_path = configure_pipeline_logging(
+        config=config,
+        level=log_level,
+        run_name='detection_windows',
+    )
+    birdnet_output_dir = get_birdnet_output_dir(config)
+    detections_path = (
+        config.detection_uncertainty.detections_path
+        if config.detection_uncertainty.detections_path is not None
+        else birdnet_output_dir / f'{detections_stem}.parquet'
+    )
+    if not detections_path.exists():
+        raise typer.BadParameter(
+            f'Detections parquet not found: {detections_path}. '
+            'Run the relevant detection stage first.'
+        )
+
+    detections_df = pl.read_parquet(detections_path)
+    evidence_df = build_noisy_or_species_time_period(
+        detections_df=detections_df,
+        start_time=config.detection_uncertainty.start_time,
+        end_time=config.detection_uncertainty.end_time,
+        config=config.detection_uncertainty,
+    )
+    write_noisy_or_species_windows(
+        evidence_df=evidence_df,
+        output_dir=config.detection_uncertainty.output_dir or detections_path.parent,
+        stem=output_stem,
+        write_csv=config.outputs.write_csv,
+    )
+
+    typer.echo(
+        f'Wrote window evidence with {evidence_df.height} rows to '
+        f'{birdnet_output_dir}'
+    )
     if log_file_path is not None:
         typer.echo(f'Wrote log to {log_file_path}')
 
