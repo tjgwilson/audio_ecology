@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from datetime import datetime
 import importlib
 import importlib.util
@@ -19,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 BIRDNET_BACKEND = 'birdnet'
 BIRDNET_DETECTIONS_STEM = 'birdnet_detections'
+BIRDNET_LOCATION_SPECIES_STEM = 'birdnet_location_species'
 
 BIRDNET_DETECTION_SCHEMA = {
     'file_path': pl.Utf8,
@@ -38,6 +38,21 @@ BIRDNET_DETECTION_SCHEMA = {
     'model_name': pl.Utf8,
     'source_result_path': pl.Utf8,
 }
+
+BIRDNET_LOCATION_SPECIES_SCHEMA = {
+    'latitude': pl.Float64,
+    'longitude': pl.Float64,
+    'birdnet_week': pl.Int64,
+    'species_name': pl.Utf8,
+    'scientific_name': pl.Utf8,
+    'common_name': pl.Utf8,
+    'location_confidence': pl.Float64,
+}
+
+LocationSpeciesCache = dict[
+    tuple[float, float, int | None],
+    list[dict[str, object]],
+]
 
 
 def get_birdnet_output_dir(config: PipelineConfig) -> Path:
@@ -76,6 +91,29 @@ def load_birdnet_model(config: PipelineConfig) -> Any:
         config.birdnet.model_backend,
     )
     logger.info('Loaded BirdNET model')
+    return model
+
+
+def load_birdnet_geo_model(config: PipelineConfig) -> Any:
+    """Load the configured BirdNET species range model."""
+    logger.info(
+        'Loading BirdNET geo model geo-%s-%s',
+        config.birdnet.model_version,
+        config.birdnet.model_backend,
+    )
+    if importlib.util.find_spec('birdnet') is None:
+        raise RuntimeError(
+            'The birdnet package is not installed in this Python environment. '
+            "Install it with: python -m pip install -e '.[birds]'"
+        )
+
+    birdnet = importlib.import_module('birdnet')
+    model = birdnet.load(
+        'geo',
+        config.birdnet.model_version,
+        config.birdnet.model_backend,
+    )
+    logger.info('Loaded BirdNET geo model')
     return model
 
 
@@ -133,6 +171,116 @@ def _prediction_rows_to_polars(predictions: Any) -> pl.DataFrame:
         )
 
     return pl.DataFrame(prediction_rows)
+
+
+def _species_rows_from_geo_predictions(predictions: Any) -> list[dict[str, object]]:
+    """Return BirdNET species rows from a geo prediction result."""
+    if predictions is None:
+        return []
+
+    if hasattr(predictions, 'to_dataframe'):
+        predictions = predictions.to_dataframe()
+
+    predictions_df = _prediction_rows_to_polars(predictions)
+    if not predictions_df.is_empty() and 'species_name' in predictions_df.columns:
+        rows: list[dict[str, object]] = []
+        for prediction_row in predictions_df.iter_rows(named=True):
+            species_name = str(prediction_row['species_name'])
+            scientific_name, common_name = _split_species_name(species_name)
+            confidence = prediction_row.get('confidence')
+            rows.append(
+                {
+                    'species_name': species_name,
+                    'scientific_name': scientific_name,
+                    'common_name': common_name,
+                    'location_confidence': float(confidence)
+                    if confidence is not None
+                    else None,
+                }
+            )
+        return sorted(rows, key=lambda row: str(row['species_name']))
+
+    if hasattr(predictions, 'to_set'):
+        rows = []
+        for species_name_value in predictions.to_set():
+            species_name = str(species_name_value)
+            scientific_name, common_name = _split_species_name(species_name)
+            rows.append(
+                {
+                    'species_name': species_name,
+                    'scientific_name': scientific_name,
+                    'common_name': common_name,
+                    'location_confidence': None,
+                }
+            )
+        return sorted(rows, key=lambda row: str(row['species_name']))
+
+    return []
+
+
+def _location_filter_key(
+    inventory_row: dict[str, object],
+) -> tuple[float, float, int | None] | None:
+    """Return a cache key for BirdNET geo filtering, if location is available."""
+    latitude = inventory_row.get('latitude')
+    longitude = inventory_row.get('longitude')
+    if latitude is None or longitude is None:
+        return None
+
+    timestamp = inventory_row.get('timestamp')
+    week = birdnet_week_from_timestamp(
+        timestamp if isinstance(timestamp, datetime) else None
+    )
+    return (float(latitude), float(longitude), week)
+
+
+def _location_species_filter(
+    geo_model: Any | None,
+    inventory_row: dict[str, object],
+    config: PipelineConfig,
+    species_filter_cache: LocationSpeciesCache,
+) -> list[str] | None:
+    """Return a BirdNET custom species list for the inventory row location."""
+    if geo_model is None:
+        return None
+
+    filter_key = _location_filter_key(inventory_row)
+    if filter_key is None:
+        logger.debug(
+            'Skipping BirdNET location filter for %s with missing location',
+            inventory_row.get('file_path'),
+        )
+        return None
+
+    if filter_key not in species_filter_cache:
+        latitude, longitude, week = filter_key
+        logger.debug(
+            'Predicting BirdNET location species for lat=%s lon=%s week=%s',
+            latitude,
+            longitude,
+            week,
+        )
+        geo_predictions = geo_model.predict(
+            latitude,
+            longitude,
+            week=week,
+            min_confidence=config.birdnet.location_min_confidence,
+        )
+        species_filter_cache[filter_key] = _species_rows_from_geo_predictions(
+            geo_predictions
+        )
+        logger.debug(
+            'BirdNET location filter for lat=%s lon=%s week=%s produced %d species',
+            latitude,
+            longitude,
+            week,
+            len(species_filter_cache[filter_key]),
+        )
+
+    return [
+        str(species_row['species_name'])
+        for species_row in species_filter_cache[filter_key]
+    ]
 
 
 def _time_to_seconds(value: object) -> float:
@@ -316,32 +464,157 @@ def write_birdnet_detection_outputs(
     return parquet_path, csv_path
 
 
+def _location_species_cache_to_dataframe(
+    species_filter_cache: LocationSpeciesCache,
+) -> pl.DataFrame:
+    """Convert cached BirdNET geo species lists to a Polars DataFrame."""
+    rows: list[dict[str, object]] = []
+    for (
+        latitude,
+        longitude,
+        birdnet_week,
+    ), species_rows in species_filter_cache.items():
+        for species_row in species_rows:
+            rows.append(
+                {
+                    'latitude': latitude,
+                    'longitude': longitude,
+                    'birdnet_week': birdnet_week,
+                    'species_name': species_row['species_name'],
+                    'scientific_name': species_row['scientific_name'],
+                    'common_name': species_row['common_name'],
+                    'location_confidence': species_row['location_confidence'],
+                }
+            )
+
+    if not rows:
+        return pl.DataFrame(schema=BIRDNET_LOCATION_SPECIES_SCHEMA)
+
+    return pl.DataFrame(rows, schema=BIRDNET_LOCATION_SPECIES_SCHEMA).sort(
+        ['latitude', 'longitude', 'birdnet_week', 'species_name']
+    )
+
+
+def write_birdnet_location_species_output(
+    species_filter_cache: LocationSpeciesCache,
+    output_dir: Path,
+    stem: str = BIRDNET_LOCATION_SPECIES_STEM,
+) -> Path:
+    """Write BirdNET location-filter species lists to CSV."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = output_dir / f'{stem}.csv'
+    species_df = _location_species_cache_to_dataframe(species_filter_cache)
+
+    logger.info(
+        'Writing BirdNET location species list to %s with %d rows',
+        csv_path,
+        species_df.height,
+    )
+    species_df.write_csv(csv_path)
+    return csv_path
+
+
+def _filter_predictions_to_species(
+    predictions_df: pl.DataFrame,
+    custom_species_list: list[str] | None,
+) -> pl.DataFrame:
+    """Restrict prediction rows to the configured BirdNET species names."""
+    if (
+        custom_species_list is None
+        or predictions_df.is_empty()
+        or 'species_name' not in predictions_df.columns
+    ):
+        return predictions_df
+
+    return predictions_df.filter(pl.col('species_name').is_in(custom_species_list))
+
+
 def _predict_audio_file(
     model: Any,
     audio_path: Path,
     config: PipelineConfig,
+    custom_species_list: list[str] | None = None,
 ) -> pl.DataFrame:
     """Predict BirdNET species for one audio file."""
     birdnet_config = config.birdnet
     logger.debug('Running BirdNET prediction for %s', audio_path)
 
-    try:
-        predictions = model.predict(
-            str(audio_path),
-            min_confidence=birdnet_config.min_confidence,
-            batch_size=birdnet_config.batch_size,
-            chunk_overlap_s=birdnet_config.overlap_s,
-            bandpass_fmin=birdnet_config.fmin_hz,
-            bandpass_fmax=birdnet_config.fmax_hz,
-            sigmoid_sensitivity=birdnet_config.sensitivity,
+    predict_kwargs: dict[str, object] = {
+        'default_confidence_threshold': birdnet_config.min_confidence,
+        'batch_size': birdnet_config.batch_size,
+        'overlap_duration_s': birdnet_config.overlap_s,
+        'bandpass_fmin': birdnet_config.fmin_hz,
+        'bandpass_fmax': birdnet_config.fmax_hz,
+        'sigmoid_sensitivity': birdnet_config.sensitivity,
+    }
+    prediction_attempts: list[tuple[str, dict[str, object], bool]] = []
+
+    if custom_species_list is not None:
+        prediction_attempts.append(
+            (
+                'current BirdNET parameters with location species list',
+                {**predict_kwargs, 'custom_species_list': custom_species_list},
+                True,
+            )
         )
-    except TypeError:
-        predictions = model.predict(str(audio_path))
+    prediction_attempts.append(('current BirdNET parameters', predict_kwargs, False))
+
+    legacy_kwargs: dict[str, object] = {
+        'min_confidence': birdnet_config.min_confidence,
+        'batch_size': birdnet_config.batch_size,
+        'chunk_overlap_s': birdnet_config.overlap_s,
+        'bandpass_fmin': birdnet_config.fmin_hz,
+        'bandpass_fmax': birdnet_config.fmax_hz,
+        'sigmoid_sensitivity': birdnet_config.sensitivity,
+    }
+    if custom_species_list is not None:
+        prediction_attempts.append(
+            (
+                'legacy BirdNET parameters with location species list',
+                {**legacy_kwargs, 'custom_species_list': custom_species_list},
+                True,
+            )
+        )
+    prediction_attempts.append(('legacy BirdNET parameters', legacy_kwargs, False))
+    prediction_attempts.append(('bare BirdNET prediction', {}, False))
+
+    predictions = None
+    location_filter_applied_by_model = False
+    for attempt_label, attempt_kwargs, applies_location_filter in prediction_attempts:
+        try:
+            predictions = model.predict(str(audio_path), **attempt_kwargs)
+            location_filter_applied_by_model = applies_location_filter
+            break
+        except TypeError as error:
+            logger.debug(
+                'BirdNET prediction attempt failed for %s using %s: %s',
+                audio_path,
+                attempt_label,
+                error,
+            )
+            continue
+
+    if predictions is None:
+        raise RuntimeError(f'BirdNET prediction failed for {audio_path}')
 
     predictions_df = _prediction_rows_to_polars(predictions)
     if predictions_df.is_empty() or 'confidence' not in predictions_df.columns:
         logger.debug('BirdNET returned no confidence-scored rows for %s', audio_path)
         return predictions_df
+
+    if custom_species_list is not None and not location_filter_applied_by_model:
+        before_location_filter_count = predictions_df.height
+        predictions_df = _filter_predictions_to_species(
+            predictions_df=predictions_df,
+            custom_species_list=custom_species_list,
+        )
+        logger.info(
+            'Applied BirdNET location species filter after prediction for %s: '
+            '%d rows kept from %d',
+            audio_path.name,
+            predictions_df.height,
+            before_location_filter_count,
+        )
 
     filtered_df = predictions_df.filter(
         pl.col('confidence') >= birdnet_config.min_confidence
@@ -359,9 +632,12 @@ def run_birdnet_predictions(
     model: Any,
     inventory_df: pl.DataFrame,
     config: PipelineConfig,
+    geo_model: Any | None = None,
+    location_species_output_dir: Path | None = None,
 ) -> pl.DataFrame:
     """Run BirdNET predictions for each readable inventory file."""
     prediction_dfs: list[pl.DataFrame] = []
+    species_filter_cache: LocationSpeciesCache = {}
     readable_count = inventory_df.filter(pl.col('readable_wav')).height
     logger.info('Running BirdNET predictions for %d readable files', readable_count)
 
@@ -377,13 +653,26 @@ def run_birdnet_predictions(
             inventory_df.height,
             audio_path.name,
         )
+        custom_species_list = _location_species_filter(
+            geo_model=geo_model,
+            inventory_row=inventory_row,
+            config=config,
+            species_filter_cache=species_filter_cache,
+        )
         prediction_df = _predict_audio_file(
             model=model,
             audio_path=audio_path,
             config=config,
+            custom_species_list=custom_species_list,
         )
         if not prediction_df.is_empty():
             prediction_dfs.append(prediction_df)
+
+    if location_species_output_dir is not None and geo_model is not None:
+        write_birdnet_location_species_output(
+            species_filter_cache=species_filter_cache,
+            output_dir=location_species_output_dir,
+        )
 
     if not prediction_dfs:
         logger.info('BirdNET produced no predictions above threshold')
@@ -404,10 +693,15 @@ def run_birdnet_analysis(
     logger.info('Starting BirdNET analysis')
 
     model = load_birdnet_model(config)
+    geo_model = (
+        load_birdnet_geo_model(config) if config.birdnet.use_location_filter else None
+    )
     predictions_df = run_birdnet_predictions(
         model=model,
         inventory_df=inventory_df,
         config=config,
+        geo_model=geo_model,
+        location_species_output_dir=output_dir,
     )
     detections_df = normalise_birdnet_predictions(
         predictions=predictions_df,
