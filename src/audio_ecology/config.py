@@ -89,6 +89,12 @@ class BirdNETConfig(BaseModel):
         return self
 
 
+class OutputConfig(BaseModel):
+    """Configuration for shared pipeline output formats."""
+
+    write_csv: bool = False
+
+
 class PipelineConfig(BaseModel):
     """Top level pipeline configuration."""
 
@@ -100,6 +106,7 @@ class PipelineConfig(BaseModel):
     devices: dict[str, DeviceConfig] = Field(default_factory=dict)
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
     birdnet: BirdNETConfig = Field(default_factory=BirdNETConfig)
+    outputs: OutputConfig = Field(default_factory=OutputConfig)
 
     @model_validator(mode='after')
     def resolve_paths(self) -> 'PipelineConfig':

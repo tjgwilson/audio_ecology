@@ -54,12 +54,13 @@ def main() -> None:
         inventory_df=inventory_df,
         output_dir=config.output_dir,
         stem=args.stem,
+        write_csv=config.outputs.write_csv,
     )
 
-    print(
-        f'Wrote inventory with {inventory_df.height} files to '
-        f'{parquet_path} and {csv_path}'
-    )
+    message = f'Wrote inventory with {inventory_df.height} files to {parquet_path}'
+    if csv_path is not None:
+        message = f'{message} and {csv_path}'
+    print(message)
 
 
 if __name__ == '__main__':

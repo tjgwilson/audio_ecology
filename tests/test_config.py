@@ -97,6 +97,27 @@ def test_load_config_keeps_chunking_analysis_targets(tmp_path: Path) -> None:
     assert config.chunking.analysis_targets == ['bird']
 
 
+def test_load_config_loads_output_preferences(tmp_path: Path) -> None:
+    project_root = tmp_path / 'repo'
+    config_dir = project_root / 'configs'
+    config_dir.mkdir(parents=True)
+
+    config_path = config_dir / 'site.yaml'
+    config_data = {
+        'input_dir': 'data/raw/site_a',
+        'output_dir': 'data/processed/site_a',
+        'site_name': 'Test Site',
+        'outputs': {
+            'write_csv': True,
+        },
+    }
+    config_path.write_text(yaml.safe_dump(config_data), encoding='utf-8')
+
+    config = load_config(config_path, project_root=project_root)
+
+    assert config.outputs.write_csv is True
+
+
 def test_load_config_rejects_top_level_analyses(tmp_path: Path) -> None:
     project_root = tmp_path / 'repo'
     config_dir = project_root / 'configs'

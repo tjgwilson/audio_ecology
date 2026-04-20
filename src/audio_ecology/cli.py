@@ -57,6 +57,7 @@ def inventory(
         inventory_df=inventory_df,
         output_dir=config.output_dir,
         stem=stem,
+        write_csv=config.outputs.write_csv,
     )
     summary = summarise_inventory(inventory_df)
 

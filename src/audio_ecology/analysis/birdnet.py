@@ -308,20 +308,19 @@ def write_birdnet_detection_outputs(
     detections_df: pl.DataFrame,
     output_dir: Path,
     stem: str = BIRDNET_DETECTIONS_STEM,
-) -> tuple[Path, Path]:
-    """Write normalized BirdNET detections to Parquet and CSV."""
+    write_csv: bool = False,
+) -> tuple[Path, Path | None]:
+    """Write normalized BirdNET detections."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
     parquet_path = output_dir / f'{stem}.parquet'
-    csv_path = output_dir / f'{stem}.csv'
+    csv_path = output_dir / f'{stem}.csv' if write_csv else None
 
-    logger.info(
-        'Writing BirdNET detections to %s and %s',
-        parquet_path,
-        csv_path,
-    )
+    logger.info('Writing BirdNET detections parquet to %s', parquet_path)
     detections_df.write_parquet(parquet_path)
-    detections_df.write_csv(csv_path)
+    if csv_path is not None:
+        logger.info('Writing BirdNET detections CSV to %s', csv_path)
+        detections_df.write_csv(csv_path)
     logger.info('Wrote BirdNET detection outputs with %d rows', detections_df.height)
 
     return parquet_path, csv_path
@@ -473,6 +472,7 @@ def run_birdnet_analysis(
     write_birdnet_detection_outputs(
         detections_df=detections_df,
         output_dir=output_dir,
+        write_csv=config.outputs.write_csv,
     )
     logger.info('Finished BirdNET analysis')
     return detections_df

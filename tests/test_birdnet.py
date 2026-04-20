@@ -12,12 +12,18 @@ from audio_ecology.analysis.birdnet import (
     BIRDNET_BACKEND,
     birdnet_week_from_timestamp,
     get_birdnet_checkpoint_store,
+    get_birdnet_output_dir,
     load_birdnet_model,
     normalise_birdnet_predictions,
     run_birdnet_analysis,
     run_birdnet_predictions,
 )
-from audio_ecology.config import BirdNETConfig, LocationConfig, PipelineConfig
+from audio_ecology.config import (
+    BirdNETConfig,
+    LocationConfig,
+    OutputConfig,
+    PipelineConfig,
+)
 
 
 class FakeBirdNETModel:
@@ -300,3 +306,26 @@ def test_run_birdnet_analysis_writes_and_reuses_checkpoints(
     )
 
     assert resumed_df.to_dicts() == detections_df.to_dicts()
+
+
+def test_run_birdnet_analysis_writes_csv_when_enabled(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = make_config(tmp_path)
+    config.outputs = OutputConfig(write_csv=True)
+    inventory_df = make_inventory_df(tmp_path)
+
+    monkeypatch.setattr(
+        'audio_ecology.analysis.birdnet.load_birdnet_model',
+        lambda config: FakeBirdNETModel(),
+    )
+
+    run_birdnet_analysis(
+        config=config,
+        inventory_df=inventory_df,
+    )
+
+    output_dir = get_birdnet_output_dir(config)
+    assert (output_dir / 'birdnet_detections.parquet').exists()
+    assert (output_dir / 'birdnet_detections.csv').exists()
