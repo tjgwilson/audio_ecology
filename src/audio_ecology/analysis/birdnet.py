@@ -11,6 +11,7 @@ from typing import Any
 
 import polars as pl
 
+from audio_ecology.analysis.checkpointing import AnalysisCheckpointStore
 from audio_ecology.config import PipelineConfig
 from audio_ecology.models import BirdDetectionRecord
 
@@ -60,6 +61,17 @@ def get_birdnet_output_dir(config: PipelineConfig) -> Path:
     if config.birdnet.output_dir is not None:
         return config.birdnet.output_dir
     return config.output_dir / 'birdnet'
+
+
+def get_birdnet_checkpoint_store(
+    config: PipelineConfig,
+) -> AnalysisCheckpointStore:
+    """Return the checkpoint store used for BirdNET detections."""
+    return AnalysisCheckpointStore(
+        output_dir=get_birdnet_output_dir(config),
+        backend_name=BIRDNET_BACKEND,
+        schema=BIRDNET_DETECTION_SCHEMA,
+    )
 
 
 def birdnet_week_from_timestamp(timestamp: datetime | None) -> int | None:
@@ -445,20 +457,19 @@ def write_birdnet_detection_outputs(
     detections_df: pl.DataFrame,
     output_dir: Path,
     stem: str = BIRDNET_DETECTIONS_STEM,
-) -> tuple[Path, Path]:
-    """Write normalized BirdNET detections to Parquet and CSV."""
+    write_csv: bool = False,
+) -> tuple[Path, Path | None]:
+    """Write normalized BirdNET detections."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
     parquet_path = output_dir / f'{stem}.parquet'
-    csv_path = output_dir / f'{stem}.csv'
+    csv_path = output_dir / f'{stem}.csv' if write_csv else None
 
-    logger.info(
-        'Writing BirdNET detections to %s and %s',
-        parquet_path,
-        csv_path,
-    )
+    logger.info('Writing BirdNET detections parquet to %s', parquet_path)
     detections_df.write_parquet(parquet_path)
-    detections_df.write_csv(csv_path)
+    if csv_path is not None:
+        logger.info('Writing BirdNET detections CSV to %s', csv_path)
+        detections_df.write_csv(csv_path)
     logger.info('Wrote BirdNET detection outputs with %d rows', detections_df.height)
 
     return parquet_path, csv_path
@@ -686,35 +697,102 @@ def run_birdnet_predictions(
 def run_birdnet_analysis(
     config: PipelineConfig,
     inventory_df: pl.DataFrame,
+    overwrite_checkpoints: bool = False,
 ) -> pl.DataFrame:
     """Run BirdNET and return normalized detection records."""
     output_dir = get_birdnet_output_dir(config)
     output_dir.mkdir(parents=True, exist_ok=True)
     logger.info('Starting BirdNET analysis')
 
-    model = load_birdnet_model(config)
+    checkpoint_store = get_birdnet_checkpoint_store(config)
+    model: Any | None = None
     geo_model = (
         load_birdnet_geo_model(config) if config.birdnet.use_location_filter else None
     )
-    predictions_df = run_birdnet_predictions(
-        model=model,
-        inventory_df=inventory_df,
-        config=config,
-        geo_model=geo_model,
-        location_species_output_dir=output_dir,
+    species_filter_cache: LocationSpeciesCache = {}
+    model_name = (
+        f'acoustic-{config.birdnet.model_version}-'
+        f'{config.birdnet.model_backend}'
     )
-    detections_df = normalise_birdnet_predictions(
-        predictions=predictions_df,
-        inventory_df=inventory_df,
-        model_name=(
-            f'acoustic-{config.birdnet.model_version}-'
-            f'{config.birdnet.model_backend}'
-        ),
+    detection_dfs: list[pl.DataFrame] = []
+
+    readable_count = inventory_df.filter(pl.col('readable_wav')).height
+    logger.info(
+        'Running BirdNET analysis for %d readable files with checkpoints in %s',
+        readable_count,
+        checkpoint_store.checkpoint_dir,
     )
+
+    for index, inventory_row in enumerate(inventory_df.iter_rows(named=True), start=1):
+        if inventory_row.get('readable_wav') is False:
+            logger.debug('Skipping unreadable file %s', inventory_row.get('file_path'))
+            continue
+
+        audio_path = Path(str(inventory_row['file_path']))
+        if checkpoint_store.exists(audio_path) and not overwrite_checkpoints:
+            detection_dfs.append(checkpoint_store.read(audio_path))
+            logger.info(
+                'Skipping BirdNET prediction %d/%d for %s; checkpoint exists',
+                index,
+                inventory_df.height,
+                audio_path.name,
+            )
+            continue
+
+        logger.info(
+            'Running BirdNET prediction %d/%d for %s',
+            index,
+            inventory_df.height,
+            audio_path.name,
+        )
+        if model is None:
+            model = load_birdnet_model(config)
+
+        custom_species_list = _location_species_filter(
+            geo_model=geo_model,
+            inventory_row=inventory_row,
+            config=config,
+            species_filter_cache=species_filter_cache,
+        )
+        predictions_df = _predict_audio_file(
+            model=model,
+            audio_path=audio_path,
+            config=config,
+            custom_species_list=custom_species_list,
+        )
+        detection_df = normalise_birdnet_predictions(
+            predictions=predictions_df,
+            inventory_df=pl.DataFrame([inventory_row]),
+            model_name=model_name,
+        )
+        checkpoint_store.write(audio_path, detection_df)
+        detection_dfs.append(detection_df)
+
+    if geo_model is not None and species_filter_cache:
+        write_birdnet_location_species_output(
+            species_filter_cache=species_filter_cache,
+            output_dir=output_dir,
+        )
+
+    detections_df = _combine_detection_dfs(detection_dfs)
 
     write_birdnet_detection_outputs(
         detections_df=detections_df,
         output_dir=output_dir,
+        write_csv=config.outputs.write_csv,
     )
     logger.info('Finished BirdNET analysis')
     return detections_df
+
+
+def _combine_detection_dfs(detection_dfs: list[pl.DataFrame]) -> pl.DataFrame:
+    """Combine per-file detection DataFrames."""
+    non_empty_dfs = [
+        detection_df
+        for detection_df in detection_dfs
+        if not detection_df.is_empty()
+    ]
+    if not non_empty_dfs:
+        return pl.DataFrame(schema=BIRDNET_DETECTION_SCHEMA)
+
+    return pl.concat(non_empty_dfs, how='diagonal_relaxed')

@@ -63,6 +63,26 @@ def chunk_records_to_polars(records: list[AudioChunkRecord]) -> pl.DataFrame:
     :param records: Inventory Records.
     :return: Polars DataFrame.
     """
+    if not records:
+        return pl.DataFrame(
+            schema={
+                'parent_file_path': pl.Utf8,
+                'parent_file_name': pl.Utf8,
+                'chunk_file_path': pl.Utf8,
+                'device_id': pl.Utf8,
+                'device_label': pl.Utf8,
+                'chunk_index': pl.Int64,
+                'chunk_start_s': pl.Float64,
+                'chunk_end_s': pl.Float64,
+                'chunk_duration_s': pl.Float64,
+                'timestamp': pl.Utf8,
+                'latitude': pl.Float64,
+                'longitude': pl.Float64,
+                'sample_rate_hz': pl.Int64,
+                'analysis_targets': pl.List(pl.Utf8),
+            }
+        )
+
     rows = []
     for record in records:
         row = record.model_dump(mode='json')
@@ -81,22 +101,26 @@ def write_inventory_outputs(
     inventory_df: pl.DataFrame,
     output_dir: Path,
     stem: str = 'audio_inventory',
-) -> tuple[Path, Path]:
-    """Write inventory outputs to Parquet and CSV.
+    write_csv: bool = False,
+) -> tuple[Path, Path | None]:
+    """Write inventory outputs.
 
     :param inventory_df: Inventory DataFrame.
     :param output_dir: Output directory.
     :param stem: Base file name stem.
-    :return: Paths to Parquet and CSV outputs.
+    :param write_csv: Whether to also write a CSV copy.
+    :return: Paths to Parquet and optional CSV outputs.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
     parquet_path = output_dir / f'{stem}.parquet'
-    csv_path = output_dir / f'{stem}.csv'
+    csv_path = output_dir / f'{stem}.csv' if write_csv else None
 
-    logger.info('Writing inventory outputs to %s and %s', parquet_path, csv_path)
+    logger.info('Writing inventory parquet to %s', parquet_path)
     inventory_df.write_parquet(parquet_path)
-    inventory_df.write_csv(csv_path)
+    if csv_path is not None:
+        logger.info('Writing inventory CSV to %s', csv_path)
+        inventory_df.write_csv(csv_path)
     logger.info('Wrote inventory outputs with %d rows', inventory_df.height)
 
     return parquet_path, csv_path
@@ -106,30 +130,30 @@ def write_chunk_inventory_outputs(
     chunk_df: pl.DataFrame,
     output_dir: Path,
     stem: str = 'audio_chunks',
-) -> tuple[Path, Path]:
-    """Write chunk inventory outputs to Parquet and CSV.
+    write_csv: bool = False,
+) -> tuple[Path, Path | None]:
+    """Write chunk inventory outputs.
 
     :param chunk_df: Chunk DataFrame.
     :param output_dir: Output directory.
     :param stem: Base file name stem.
-    :return: Paths to Parquet and CSV outputs.
+    :param write_csv: Whether to also write a CSV copy.
+    :return: Paths to Parquet and optional CSV outputs.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
     parquet_path = output_dir / f'{stem}.parquet'
-    csv_path = output_dir / f'{stem}.csv'
+    csv_path = output_dir / f'{stem}.csv' if write_csv else None
 
-    logger.info(
-        'Writing chunk inventory outputs to %s and %s',
-        parquet_path,
-        csv_path,
-    )
+    logger.info('Writing chunk inventory parquet to %s', parquet_path)
     chunk_df.write_parquet(parquet_path)
 
-    chunk_df_for_csv = chunk_df.with_columns(
-        pl.col('analysis_targets').list.join(';').alias('analysis_targets')
-    )
-    chunk_df_for_csv.write_csv(csv_path)
+    if csv_path is not None:
+        logger.info('Writing chunk inventory CSV to %s', csv_path)
+        chunk_df_for_csv = chunk_df.with_columns(
+            pl.col('analysis_targets').list.join(';').alias('analysis_targets')
+        )
+        chunk_df_for_csv.write_csv(csv_path)
     logger.info('Wrote chunk inventory outputs with %d rows', chunk_df.height)
 
     return parquet_path, csv_path
@@ -169,6 +193,7 @@ def build_and_write_inventory_with_chunks(
         inventory_df=inventory_df,
         output_dir=config.output_dir,
         stem=stem,
+        write_csv=config.outputs.write_csv,
     )
 
     chunk_df: pl.DataFrame | None = None
@@ -192,6 +217,7 @@ def build_and_write_inventory_with_chunks(
                 chunk_df=chunk_df,
                 output_dir=config.output_dir,
                 stem='audio_chunks',
+                write_csv=config.outputs.write_csv,
             )
     else:
         logger.info('Chunking is disabled')
