@@ -71,6 +71,8 @@ def chunk_records_to_polars(records: list[AudioChunkRecord]) -> pl.DataFrame:
                 'chunk_file_path': pl.Utf8,
                 'device_id': pl.Utf8,
                 'device_label': pl.Utf8,
+                'deployment_id': pl.Utf8,
+                'habitat_label': pl.Utf8,
                 'chunk_index': pl.Int64,
                 'chunk_start_s': pl.Float64,
                 'chunk_end_s': pl.Float64,

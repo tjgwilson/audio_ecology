@@ -68,6 +68,8 @@ def make_audio_file_record(
         file_name=wav_path.name,
         device_id='24F319046907737B',
         device_label='am_1',
+        deployment_id='wyke_woods_spring_2026',
+        habitat_label='mixed_woodland',
         timestamp=datetime(2026, 4, 17, 22, 35, 41, tzinfo=timezone.utc),
         sample_rate_hz=sample_rate_hz,
         duration_s=duration_s,
@@ -118,6 +120,8 @@ def test_build_chunk_records_for_file_without_overlap(tmp_path: Path) -> None:
     assert chunk_records[0].chunk_end_s == 3.0
     assert chunk_records[0].chunk_duration_s == 3.0
     assert chunk_records[0].analysis_targets == ['bird', 'bat']
+    assert chunk_records[0].deployment_id == 'wyke_woods_spring_2026'
+    assert chunk_records[0].habitat_label == 'mixed_woodland'
 
     assert chunk_records[1].chunk_start_s == 3.0
     assert chunk_records[1].chunk_end_s == 6.0

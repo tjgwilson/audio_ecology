@@ -9,7 +9,13 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 TimestampSource = Literal['guano', 'filename', 'missing']
-LocationSource = Literal['guano', 'device_config', 'site_config', 'missing']
+LocationSource = Literal[
+    'guano',
+    'deployment_config',
+    'device_config',
+    'site_config',
+    'missing',
+]
 
 
 class AudioFileRecord(BaseModel):
@@ -19,6 +25,8 @@ class AudioFileRecord(BaseModel):
     file_name: str
     device_id: str | None = None
     device_label: str | None = None
+    deployment_id: str | None = None
+    habitat_label: str | None = None
 
     timestamp: datetime | None = None
     timestamp_source: TimestampSource = 'missing'
@@ -47,6 +55,8 @@ class AudioChunkRecord(BaseModel):
     chunk_file_path: Path | None = None
     device_id: str | None = None
     device_label: str | None = None
+    deployment_id: str | None = None
+    habitat_label: str | None = None
 
     chunk_index: int
     chunk_start_s: float
@@ -81,6 +91,8 @@ class BirdDetectionRecord(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     temperature_int_c: float | None = None
+    deployment_id: str | None = None
+    habitat_label: str | None = None
 
     scientific_name: str
     common_name: str

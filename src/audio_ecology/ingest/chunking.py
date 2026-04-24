@@ -64,6 +64,8 @@ def build_chunk_records_for_file(
                 parent_file_name=record.file_name,
                 device_id=record.device_id,
                 device_label=record.device_label,
+                deployment_id=record.deployment_id,
+                habitat_label=record.habitat_label,
                 chunk_index=chunk_index,
                 chunk_start_s=round(chunk_start_s, 6),
                 chunk_end_s=round(chunk_end_s, 6),

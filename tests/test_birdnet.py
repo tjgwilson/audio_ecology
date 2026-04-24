@@ -22,6 +22,7 @@ from audio_ecology.analysis.birdnet import (
 from audio_ecology.analysis.storage import load_detection_dataframe
 from audio_ecology.config import (
     BirdNETConfig,
+    DeploymentConfig,
     LocationConfig,
     OutputConfig,
     PipelineConfig,
@@ -112,6 +113,16 @@ def make_config(tmp_path: Path) -> PipelineConfig:
             longitude=-2.1,
         ),
         devices={},
+        deployments={
+            'test_site_deployment': DeploymentConfig(
+                device_id='24F319046907737B',
+                habitat_label='mixed_woodland',
+                fallback_location=LocationConfig(
+                    latitude=50.432584,
+                    longitude=-3.672039,
+                ),
+            )
+        },
         birdnet=BirdNETConfig(
             output_dir=tmp_path / 'processed' / 'birdnet',
             model_version='2.4',
@@ -137,6 +148,8 @@ def make_inventory_df(tmp_path: Path) -> pl.DataFrame:
                 'timestamp': datetime(
                     2026, 4, 17, 22, 35, 41, tzinfo=timezone.utc
                 ),
+                'deployment_id': 'test_site_deployment',
+                'habitat_label': 'mixed_woodland',
                 'latitude': 50.432584,
                 'longitude': -3.672039,
                 'temperature_int_c': 18.5,
@@ -461,6 +474,8 @@ def test_normalise_birdnet_predictions_adds_inventory_metadata_and_temperature(
     assert detection['latitude'] == 50.432584
     assert detection['longitude'] == -3.672039
     assert detection['temperature_int_c'] == 18.5
+    assert detection['deployment_id'] == 'test_site_deployment'
+    assert detection['habitat_label'] == 'mixed_woodland'
     assert detection['analysis_backend'] == BIRDNET_BACKEND
     assert detection['model_name'] == 'acoustic-2.4-tf'
 

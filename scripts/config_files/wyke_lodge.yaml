@@ -19,6 +19,11 @@ fallback_location:
 devices:
   24F319046907737B:
     label: audiomoth_1
+
+deployments:
+  wyke_lodge_spring_2026_a:
+    device_id: 24F319046907737B
+    habitat_label: mixed_woodland
     fallback_location:
       latitude: 50.432584
       longitude: -3.672039

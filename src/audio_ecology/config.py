@@ -26,6 +26,14 @@ class DeviceConfig(BaseModel):
     fallback_location: LocationConfig | None = None
 
 
+class DeploymentConfig(BaseModel):
+    """Configuration for one active recorder deployment."""
+
+    device_id: str
+    habitat_label: str | None = None
+    fallback_location: LocationConfig | None = None
+
+
 class ChunkingConfig(BaseModel):
     """Configuration for optional audio chunking."""
 
@@ -172,6 +180,7 @@ class PipelineConfig(BaseModel):
     site_name: str
     fallback_location: LocationConfig | None = None
     devices: dict[str, DeviceConfig] = Field(default_factory=dict)
+    deployments: dict[str, DeploymentConfig] = Field(default_factory=dict)
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
     birdnet: BirdNETConfig = Field(default_factory=BirdNETConfig)
     detection_uncertainty: DetectionUncertaintyConfig = Field(
@@ -230,6 +239,14 @@ class PipelineConfig(BaseModel):
             self.logging.output_dir = (
                 self.project_root / self.logging.output_dir
             ).resolve()
+
+        deployment_device_ids = [
+            deployment.device_id for deployment in self.deployments.values()
+        ]
+        if len(deployment_device_ids) != len(set(deployment_device_ids)):
+            raise ValueError(
+                'deployments must contain at most one active deployment per device_id'
+            )
 
         return self
 

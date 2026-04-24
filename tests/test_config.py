@@ -170,6 +170,33 @@ def test_load_config_loads_logging_preferences(tmp_path: Path) -> None:
     ).resolve()
 
 
+def test_load_config_rejects_multiple_deployments_for_one_device(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / 'repo'
+    config_dir = project_root / 'configs'
+    config_dir.mkdir(parents=True)
+
+    config_path = config_dir / 'site.yaml'
+    config_data = {
+        'input_dir': 'data/raw/site_a',
+        'output_dir': 'data/processed/site_a',
+        'site_name': 'Test Site',
+        'deployments': {
+            'deploy_a': {'device_id': '24F319046907737B'},
+            'deploy_b': {'device_id': '24F319046907737B'},
+        },
+    }
+    config_path.write_text(yaml.safe_dump(config_data), encoding='utf-8')
+
+    try:
+        load_config(config_path, project_root=project_root)
+    except ValueError as exc:
+        assert 'at most one active deployment per device_id' in str(exc)
+    else:
+        raise AssertionError('Expected duplicate deployment device_id to fail')
+
+
 def test_load_config_rejects_top_level_analyses(tmp_path: Path) -> None:
     project_root = tmp_path / 'repo'
     config_dir = project_root / 'configs'
