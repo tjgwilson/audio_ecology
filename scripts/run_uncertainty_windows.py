@@ -145,10 +145,12 @@ def main() -> None:
     args = parse_args()
     config = load_config(args.config_path.resolve())
     uncertainty_config = config.detection_uncertainty
-    if uncertainty_config.start_time is None or uncertainty_config.end_time is None:
+    resolved_start_time = uncertainty_config.resolved_start_time
+    resolved_end_time = uncertainty_config.resolved_end_time
+    if resolved_start_time is None or resolved_end_time is None:
         raise ValueError(
-            'Set detection_uncertainty.start_time and '
-            'detection_uncertainty.end_time in the config.'
+            'Set detection_uncertainty.start_time together with end_time '
+            'or duration_s in the config.'
         )
 
     log_file_path = configure_pipeline_logging(
@@ -180,8 +182,8 @@ def main() -> None:
     )
     evidence_df = build_noisy_or_species_time_period(
         detections_df=detections_df,
-        start_time=uncertainty_config.start_time,
-        end_time=uncertainty_config.end_time,
+        start_time=resolved_start_time,
+        end_time=resolved_end_time,
         config=uncertainty_config,
     )
     parquet_path, csv_path = write_noisy_or_species_windows(
@@ -193,8 +195,8 @@ def main() -> None:
 
     message = (
         f'Wrote {evidence_df.height} window evidence rows to {parquet_path} '
-        f'for {uncertainty_config.start_time.isoformat()} to '
-        f'{uncertainty_config.end_time.isoformat()} '
+        f'for {resolved_start_time.isoformat()} to '
+        f'{resolved_end_time.isoformat()} '
         f'event_gap_s={uncertainty_config.event_gap_s:g}'
     )
     if csv_path is not None:

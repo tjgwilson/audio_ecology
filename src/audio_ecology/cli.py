@@ -214,13 +214,12 @@ def detection_windows(
     :raises typer.BadParameter: If required config values or detections are missing.
     """
     config = load_config(config_path.resolve())
-    if (
-        config.detection_uncertainty.start_time is None
-        or config.detection_uncertainty.end_time is None
-    ):
+    resolved_start_time = config.detection_uncertainty.resolved_start_time
+    resolved_end_time = config.detection_uncertainty.resolved_end_time
+    if resolved_start_time is None or resolved_end_time is None:
         raise typer.BadParameter(
-            'Set detection_uncertainty.start_time and '
-            'detection_uncertainty.end_time in the config.'
+            'Set detection_uncertainty.start_time together with end_time '
+            'or duration_s in the config.'
         )
 
     log_file_path = configure_pipeline_logging(
@@ -245,8 +244,8 @@ def detection_windows(
     )
     evidence_df = build_noisy_or_species_time_period(
         detections_df=detections_df,
-        start_time=config.detection_uncertainty.start_time,
-        end_time=config.detection_uncertainty.end_time,
+        start_time=resolved_start_time,
+        end_time=resolved_end_time,
         config=config.detection_uncertainty,
     )
     write_noisy_or_species_windows(

@@ -64,7 +64,7 @@ detection_uncertainty:
   output_dir: data/processed/detection_uncertainty
   output_stem: detection_window_evidence
   start_time: "2026-04-20T12:35:11+00:00"
-  end_time: "2026-04-20T13:06:00+00:00"
+  duration_s: 1849
   event_gap_s: 30.0
   min_confidence: 0.25
   possible_threshold: 0.40

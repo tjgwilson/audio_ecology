@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 import yaml
@@ -100,6 +101,89 @@ def test_load_config_resolves_detection_uncertainty_paths(tmp_path: Path) -> Non
     assert config.detection_uncertainty.output_dir == (
         project_root / 'data/processed/site_a/detection_uncertainty'
     ).resolve()
+
+
+def test_load_config_accepts_detection_uncertainty_duration(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / 'repo'
+    config_dir = project_root / 'configs'
+    config_dir.mkdir(parents=True)
+
+    config_path = config_dir / 'site.yaml'
+    config_data = {
+        'input_dir': 'data/raw/site_a',
+        'output_dir': 'data/processed/site_a',
+        'site_name': 'Test Site',
+        'detection_uncertainty': {
+            'start_time': '2026-04-20T12:35:00+00:00',
+            'duration_s': 3600,
+        },
+    }
+    config_path.write_text(yaml.safe_dump(config_data), encoding='utf-8')
+
+    config = load_config(config_path, project_root=project_root)
+
+    assert config.detection_uncertainty.resolved_start_time == datetime.fromisoformat(
+        '2026-04-20T12:35:00+00:00'
+    )
+    assert config.detection_uncertainty.resolved_end_time == datetime.fromisoformat(
+        '2026-04-20T13:35:00+00:00'
+    )
+
+
+def test_load_config_rejects_detection_uncertainty_end_time_and_duration(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / 'repo'
+    config_dir = project_root / 'configs'
+    config_dir.mkdir(parents=True)
+
+    config_path = config_dir / 'site.yaml'
+    config_data = {
+        'input_dir': 'data/raw/site_a',
+        'output_dir': 'data/processed/site_a',
+        'site_name': 'Test Site',
+        'detection_uncertainty': {
+            'start_time': '2026-04-20T12:35:00+00:00',
+            'end_time': '2026-04-20T13:35:00+00:00',
+            'duration_s': 3600,
+        },
+    }
+    config_path.write_text(yaml.safe_dump(config_data), encoding='utf-8')
+
+    try:
+        load_config(config_path, project_root=project_root)
+    except ValueError as exc:
+        assert 'end_time or duration_s, but not both' in str(exc)
+    else:
+        raise AssertionError('Expected mixed end_time and duration_s to fail')
+
+
+def test_load_config_rejects_detection_uncertainty_duration_without_start_time(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / 'repo'
+    config_dir = project_root / 'configs'
+    config_dir.mkdir(parents=True)
+
+    config_path = config_dir / 'site.yaml'
+    config_data = {
+        'input_dir': 'data/raw/site_a',
+        'output_dir': 'data/processed/site_a',
+        'site_name': 'Test Site',
+        'detection_uncertainty': {
+            'duration_s': 3600,
+        },
+    }
+    config_path.write_text(yaml.safe_dump(config_data), encoding='utf-8')
+
+    try:
+        load_config(config_path, project_root=project_root)
+    except ValueError as exc:
+        assert 'require start_time' in str(exc)
+    else:
+        raise AssertionError('Expected duration_s without start_time to fail')
 
 
 def test_load_config_keeps_chunking_analysis_targets(tmp_path: Path) -> None:

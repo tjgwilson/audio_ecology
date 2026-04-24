@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from pathlib import Path
 
@@ -167,22 +167,64 @@ class DetectionUncertaintyConfig(BaseModel):
     output_stem: str = 'detection_window_evidence'
     start_time: datetime | None = None
     end_time: datetime | None = None
+    duration_s: float | None = None
     event_gap_s: float = 30.0
     min_confidence: float = 0.25
     possible_threshold: float = 0.40
     probable_threshold: float = 0.70
     strong_threshold: float = 0.90
 
+    @property
+    def resolved_start_time(self) -> datetime | None:
+        """Return the resolved window start time.
+
+        :return: Window start time, or ``None`` when unset.
+        """
+        return self.start_time
+
+    @property
+    def resolved_end_time(self) -> datetime | None:
+        """Return the resolved window end time.
+
+        :return: Explicit end time or start time plus duration.
+        """
+        if self.end_time is not None:
+            return self.end_time
+
+        if self.start_time is not None and self.duration_s is not None:
+            return self.start_time + timedelta(seconds=self.duration_s)
+
+        return None
+
     @model_validator(mode='after')
     def validate_detection_uncertainty(self) -> 'DetectionUncertaintyConfig':
         """Validate detection uncertainty settings."""
-        if (
-            self.start_time is not None
-            and self.end_time is not None
-            and self.end_time <= self.start_time
+        if self.start_time is not None and self.end_time is not None and (
+            self.end_time <= self.start_time
         ):
             raise ValueError(
                 'detection_uncertainty.end_time must be after start_time'
+            )
+
+        if self.duration_s is not None and self.duration_s <= 0:
+            raise ValueError('detection_uncertainty.duration_s must be greater than 0')
+
+        has_start_time = self.start_time is not None
+        has_end_time = self.end_time is not None
+        has_duration = self.duration_s is not None
+        if has_end_time and has_duration:
+            raise ValueError(
+                'detection_uncertainty may use end_time or duration_s, but not both'
+            )
+
+        if has_start_time and not (has_end_time or has_duration):
+            raise ValueError(
+                'detection_uncertainty.start_time requires end_time or duration_s'
+            )
+
+        if (has_end_time or has_duration) and not has_start_time:
+            raise ValueError(
+                'detection_uncertainty.end_time and duration_s require start_time'
             )
 
         if self.event_gap_s < 0:
