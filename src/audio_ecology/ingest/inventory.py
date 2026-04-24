@@ -82,6 +82,11 @@ def chunk_records_to_polars(records: list[AudioChunkRecord]) -> pl.DataFrame:
                 'timestamp': pl.Utf8,
                 'latitude': pl.Float64,
                 'longitude': pl.Float64,
+                'sunrise_timestamp': pl.Utf8,
+                'sunset_timestamp': pl.Utf8,
+                'minutes_from_sunrise': pl.Float64,
+                'minutes_to_sunset': pl.Float64,
+                'is_daylight': pl.Boolean,
                 'sample_rate_hz': pl.Int64,
                 'analysis_targets': pl.List(pl.Utf8),
             }

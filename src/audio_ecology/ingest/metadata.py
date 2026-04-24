@@ -24,6 +24,7 @@ from audio_ecology.constants import (
     TIMESTAMP_SOURCE_MISSING,
 )
 from audio_ecology.models import AudioFileRecord
+from audio_ecology.solar import calculate_solar_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -362,6 +363,11 @@ def build_audio_file_record(
         logger.warning('WAV metadata read failed for %s: %s', file_path, wav_note)
 
     note_text = '; '.join(notes) if notes else None
+    solar_metadata = calculate_solar_metadata(
+        timestamp=timestamp,
+        latitude=latitude,
+        longitude=longitude,
+    )
 
     record = AudioFileRecord(
         file_path=file_path,
@@ -374,6 +380,11 @@ def build_audio_file_record(
         timestamp=timestamp,
         timestamp_source=timestamp_source,
         filename_timestamp=filename_timestamp,
+        sunrise_timestamp=solar_metadata.sunrise_timestamp,
+        sunset_timestamp=solar_metadata.sunset_timestamp,
+        minutes_from_sunrise=solar_metadata.minutes_from_sunrise,
+        minutes_to_sunset=solar_metadata.minutes_to_sunset,
+        is_daylight=solar_metadata.is_daylight,
         sample_rate_hz=sample_rate_hz,
         duration_s=duration_s,
         file_size_bytes=file_path.stat().st_size,

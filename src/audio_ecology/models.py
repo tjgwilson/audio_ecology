@@ -32,6 +32,11 @@ class AudioFileRecord(BaseModel):
     timestamp: datetime | None = None
     timestamp_source: TimestampSource = 'missing'
     filename_timestamp: datetime | None = None
+    sunrise_timestamp: datetime | None = None
+    sunset_timestamp: datetime | None = None
+    minutes_from_sunrise: float | None = None
+    minutes_to_sunset: float | None = None
+    is_daylight: bool | None = None
 
     sample_rate_hz: int | None = None
     duration_s: float | None = None
@@ -68,6 +73,11 @@ class AudioChunkRecord(BaseModel):
     timestamp: datetime | None = None
     latitude: float | None = None
     longitude: float | None = None
+    sunrise_timestamp: datetime | None = None
+    sunset_timestamp: datetime | None = None
+    minutes_from_sunrise: float | None = None
+    minutes_to_sunset: float | None = None
+    is_daylight: bool | None = None
 
     sample_rate_hz: int | None = None
     analysis_targets: list[str] = Field(default_factory=list)
@@ -92,6 +102,11 @@ class BirdDetectionRecord(BaseModel):
     timestamp: datetime | None = None
     latitude: float | None = None
     longitude: float | None = None
+    sunrise_timestamp: datetime | None = None
+    sunset_timestamp: datetime | None = None
+    minutes_from_sunrise: float | None = None
+    minutes_to_sunset: float | None = None
+    is_daylight: bool | None = None
     temperature_int_c: float | None = None
     deployment_id: str | None = None
     habitat_label: str | None = None

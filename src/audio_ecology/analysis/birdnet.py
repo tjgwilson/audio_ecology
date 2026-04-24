@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import importlib
 import importlib.util
 import logging
@@ -21,6 +21,7 @@ from audio_ecology.analysis.storage import (
 )
 from audio_ecology.config import PipelineConfig
 from audio_ecology.models import BirdDetectionRecord
+from audio_ecology.solar import calculate_solar_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,11 @@ BIRDNET_DETECTION_SCHEMA = {
     'timestamp': pl.Utf8,
     'latitude': pl.Float64,
     'longitude': pl.Float64,
+    'sunrise_timestamp': pl.Utf8,
+    'sunset_timestamp': pl.Utf8,
+    'minutes_from_sunrise': pl.Float64,
+    'minutes_to_sunset': pl.Float64,
+    'is_daylight': pl.Boolean,
     'temperature_int_c': pl.Float64,
     'deployment_id': pl.Utf8,
     'habitat_label': pl.Utf8,
@@ -459,6 +465,17 @@ def normalise_birdnet_predictions(
         scientific_name, common_name = _split_species_name(species_name)
         detection_start_s = _time_to_seconds(prediction_row['start_time'])
         detection_end_s = _time_to_seconds(prediction_row['end_time'])
+        detection_timestamp = None
+        timestamp_value = metadata.get('timestamp')
+        if isinstance(timestamp_value, datetime):
+            detection_timestamp = timestamp_value + timedelta(
+                seconds=detection_start_s
+            )
+        solar_metadata = calculate_solar_metadata(
+            timestamp=detection_timestamp,
+            latitude=metadata.get('latitude'),
+            longitude=metadata.get('longitude'),
+        )
 
         detection_record = BirdDetectionRecord(
             file_path=Path(str(metadata['file_path'])),
@@ -469,6 +486,11 @@ def normalise_birdnet_predictions(
             timestamp=metadata.get('timestamp'),
             latitude=metadata.get('latitude'),
             longitude=metadata.get('longitude'),
+            sunrise_timestamp=solar_metadata.sunrise_timestamp,
+            sunset_timestamp=solar_metadata.sunset_timestamp,
+            minutes_from_sunrise=solar_metadata.minutes_from_sunrise,
+            minutes_to_sunset=solar_metadata.minutes_to_sunset,
+            is_daylight=solar_metadata.is_daylight,
             temperature_int_c=metadata.get('temperature_int_c'),
             deployment_id=metadata.get('deployment_id'),
             habitat_label=metadata.get('habitat_label'),

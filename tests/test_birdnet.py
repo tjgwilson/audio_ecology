@@ -478,6 +478,10 @@ def test_normalise_birdnet_predictions_adds_inventory_metadata_and_temperature(
     assert detection['deployment_id'] == 'test_site_deployment'
     assert detection['habitat_label'] == 'mixed_woodland'
     assert detection['detection_targets'] == ['bird', 'bat']
+    assert detection['sunrise_timestamp'] is not None
+    assert detection['sunset_timestamp'] is not None
+    assert detection['minutes_from_sunrise'] is not None
+    assert detection['minutes_to_sunset'] is not None
     assert detection['analysis_backend'] == BIRDNET_BACKEND
     assert detection['model_name'] == 'acoustic-2.4-tf'
 

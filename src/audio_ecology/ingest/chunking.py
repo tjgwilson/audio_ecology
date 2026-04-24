@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 import logging
 from pathlib import Path
 import wave
 
 from audio_ecology.config import ChunkingConfig
 from audio_ecology.models import AudioChunkRecord, AudioFileRecord
+from audio_ecology.solar import calculate_solar_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +59,16 @@ def build_chunk_records_for_file(
 
     while chunk_start_s < duration_s:
         chunk_end_s = min(chunk_start_s + chunking_config.duration_s, duration_s)
+        chunk_timestamp = (
+            record.timestamp + timedelta(seconds=chunk_start_s)
+            if record.timestamp is not None
+            else None
+        )
+        solar_metadata = calculate_solar_metadata(
+            timestamp=chunk_timestamp,
+            latitude=record.latitude,
+            longitude=record.longitude,
+        )
 
         chunk_records.append(
             AudioChunkRecord(
@@ -74,6 +86,11 @@ def build_chunk_records_for_file(
                 timestamp=record.timestamp,
                 latitude=record.latitude,
                 longitude=record.longitude,
+                sunrise_timestamp=solar_metadata.sunrise_timestamp,
+                sunset_timestamp=solar_metadata.sunset_timestamp,
+                minutes_from_sunrise=solar_metadata.minutes_from_sunrise,
+                minutes_to_sunset=solar_metadata.minutes_to_sunset,
+                is_daylight=solar_metadata.is_daylight,
                 sample_rate_hz=record.sample_rate_hz,
                 analysis_targets=analysis_targets or [],
             )

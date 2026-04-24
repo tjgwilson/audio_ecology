@@ -101,6 +101,11 @@ def test_build_audio_file_record_uses_guano_timestamp_and_location(
     assert record.latitude == 50.432584
     assert record.longitude == -3.672039
     assert record.location_source == LOCATION_SOURCE_GUANO
+    assert record.sunrise_timestamp is not None
+    assert record.sunset_timestamp is not None
+    assert record.minutes_from_sunrise is not None
+    assert record.minutes_to_sunset is not None
+    assert record.is_daylight is False
     assert record.temperature_int_c == 18.5
     assert record.sample_rate_hz == 16000
     assert record.duration_s == 2.0
@@ -128,6 +133,8 @@ def test_build_audio_file_record_falls_back_to_filename_timestamp_and_device_loc
     assert record.deployment_id == 'wyke_woods_spring_2026'
     assert record.habitat_label == 'mixed_woodland'
     assert record.detection_targets == ['bird', 'bat']
+    assert record.sunrise_timestamp is not None
+    assert record.sunset_timestamp is not None
     assert record.temperature_int_c is None
 
 
