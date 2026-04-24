@@ -124,6 +124,66 @@ def test_load_config_keeps_chunking_analysis_targets(tmp_path: Path) -> None:
     assert config.chunking.analysis_targets == ['bird']
 
 
+def test_load_config_rejects_invalid_chunking_analysis_targets(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / 'repo'
+    config_dir = project_root / 'configs'
+    config_dir.mkdir(parents=True)
+
+    config_path = config_dir / 'site.yaml'
+    config_data = {
+        'input_dir': 'data/raw/site_a',
+        'output_dir': 'data/processed/site_a',
+        'site_name': 'Test Site',
+        'chunking': {
+            'enabled': True,
+            'analysis_targets': ['birds'],
+        },
+    }
+    config_path.write_text(yaml.safe_dump(config_data), encoding='utf-8')
+
+    try:
+        load_config(config_path, project_root=project_root)
+    except ValueError as exc:
+        assert 'chunking.analysis_targets' in str(exc)
+        assert 'birds' in str(exc)
+    else:
+        raise AssertionError('Expected invalid chunking analysis_targets to fail')
+
+
+def test_load_config_rejects_invalid_deployment_detection_targets(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / 'repo'
+    config_dir = project_root / 'configs'
+    config_dir.mkdir(parents=True)
+
+    config_path = config_dir / 'site.yaml'
+    config_data = {
+        'input_dir': 'data/raw/site_a',
+        'output_dir': 'data/processed/site_a',
+        'site_name': 'Test Site',
+        'deployments': {
+            'deploy_a': {
+                'device_id': '24F319046907737B',
+                'detection_targets': ['birds'],
+            }
+        },
+    }
+    config_path.write_text(yaml.safe_dump(config_data), encoding='utf-8')
+
+    try:
+        load_config(config_path, project_root=project_root)
+    except ValueError as exc:
+        assert 'deployments.detection_targets' in str(exc)
+        assert 'birds' in str(exc)
+    else:
+        raise AssertionError(
+            'Expected invalid deployment detection_targets to fail'
+        )
+
+
 def test_load_config_loads_output_preferences(tmp_path: Path) -> None:
     project_root = tmp_path / 'repo'
     config_dir = project_root / 'configs'

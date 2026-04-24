@@ -8,6 +8,7 @@ from pathlib import Path
 import polars as pl
 from polars import DataFrame
 
+from audio_ecology.analysis.storage import prepare_dataframe_for_csv
 from audio_ecology.config import PipelineConfig
 from audio_ecology.ingest.chunking import (
     build_chunk_records,
@@ -123,7 +124,7 @@ def write_inventory_outputs(
     inventory_df.write_parquet(parquet_path)
     if csv_path is not None:
         logger.info('Writing inventory CSV to %s', csv_path)
-        inventory_df.write_csv(csv_path)
+        prepare_dataframe_for_csv(inventory_df).write_csv(csv_path)
     logger.info('Wrote inventory outputs with %d rows', inventory_df.height)
 
     return parquet_path, csv_path
@@ -153,11 +154,7 @@ def write_chunk_inventory_outputs(
 
     if csv_path is not None:
         logger.info('Writing chunk inventory CSV to %s', csv_path)
-        chunk_df_for_csv = chunk_df.with_columns(
-            pl.col('analysis_targets').list.join(';').alias('analysis_targets'),
-            pl.col('detection_targets').list.join(';').alias('detection_targets'),
-        )
-        chunk_df_for_csv.write_csv(csv_path)
+        prepare_dataframe_for_csv(chunk_df).write_csv(csv_path)
     logger.info('Wrote chunk inventory outputs with %d rows', chunk_df.height)
 
     return parquet_path, csv_path

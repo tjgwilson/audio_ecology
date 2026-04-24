@@ -136,6 +136,28 @@ def load_detection_dataframe(
     raise FileNotFoundError(f'Detections parquet not found: {detections_path}')
 
 
+def prepare_dataframe_for_csv(dataframe: pl.DataFrame) -> pl.DataFrame:
+    """Convert list columns to delimited strings so the frame can be written as CSV.
+
+    :param dataframe: DataFrame that may contain list columns.
+    :return: CSV-safe DataFrame with list columns joined by ``;``.
+    """
+    list_columns = [
+        column_name
+        for column_name, column_type in dataframe.schema.items()
+        if isinstance(column_type, pl.List)
+    ]
+    if not list_columns:
+        return dataframe
+
+    return dataframe.with_columns(
+        [
+            pl.col(column_name).list.join(';').alias(column_name)
+            for column_name in list_columns
+        ]
+    )
+
+
 def write_detection_dataset(
     detections_df: pl.DataFrame,
     dataset_dir: Path,
@@ -183,6 +205,6 @@ def write_detection_dataset(
                 partition_date,
                 csv_path,
             )
-            partition_df.write_csv(csv_path)
+            prepare_dataframe_for_csv(partition_df).write_csv(csv_path)
 
     return dataset_dir

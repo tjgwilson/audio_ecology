@@ -18,3 +18,11 @@ LOCATION_SOURCE_DEPLOYMENT_CONFIG = 'deployment_config'
 LOCATION_SOURCE_DEVICE_CONFIG = 'device_config'
 LOCATION_SOURCE_SITE_CONFIG = 'site_config'
 LOCATION_SOURCE_MISSING = 'missing'
+
+ALLOWED_DETECTION_TARGETS = (
+    'bird',
+    'bat',
+    'insect',
+    'other',
+    'all',
+)

@@ -7,9 +7,36 @@ import logging
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from audio_ecology.constants import ALLOWED_DETECTION_TARGETS
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_detection_target_labels(
+    labels: list[str],
+    field_name: str,
+) -> list[str]:
+    """Validate configured target labels against the supported vocabulary.
+
+    :param labels: Configured target labels.
+    :param field_name: Name of the config field being validated.
+    :return: Validated labels unchanged.
+    :raises ValueError: If any labels are unsupported.
+    """
+    invalid_labels = [
+        label for label in labels if label not in ALLOWED_DETECTION_TARGETS
+    ]
+    if invalid_labels:
+        allowed_values = ', '.join(ALLOWED_DETECTION_TARGETS)
+        invalid_values = ', '.join(sorted(invalid_labels))
+        raise ValueError(
+            f'{field_name} contains unsupported values: {invalid_values}. '
+            f'Allowed values are: {allowed_values}'
+        )
+
+    return labels
 
 
 class LocationConfig(BaseModel):
@@ -34,6 +61,19 @@ class DeploymentConfig(BaseModel):
     detection_targets: list[str] = Field(default_factory=list)
     fallback_location: LocationConfig | None = None
 
+    @field_validator('detection_targets')
+    @classmethod
+    def validate_detection_targets(cls, labels: list[str]) -> list[str]:
+        """Validate deployment detection target labels.
+
+        :param labels: Configured detection targets.
+        :return: Validated detection targets.
+        """
+        return _validate_detection_target_labels(
+            labels,
+            field_name='deployments.detection_targets',
+        )
+
 
 class ChunkingConfig(BaseModel):
     """Configuration for optional audio chunking."""
@@ -45,6 +85,19 @@ class ChunkingConfig(BaseModel):
     write_audio_files: bool = False
     output_dir: Path | None = None
     analysis_targets: list[str] = Field(default_factory=list)
+
+    @field_validator('analysis_targets')
+    @classmethod
+    def validate_analysis_targets(cls, labels: list[str]) -> list[str]:
+        """Validate chunking analysis target labels.
+
+        :param labels: Configured analysis targets.
+        :return: Validated analysis targets.
+        """
+        return _validate_detection_target_labels(
+            labels,
+            field_name='chunking.analysis_targets',
+        )
 
     @model_validator(mode='after')
     def validate_chunking(self) -> 'ChunkingConfig':
