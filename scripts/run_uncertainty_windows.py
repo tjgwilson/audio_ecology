@@ -90,16 +90,7 @@ def resolve_detections_path(config, args: argparse.Namespace) -> Path:
     if args.detections_path is not None:
         return args.detections_path.resolve()
 
-    if config.detection_uncertainty.detections_path is not None:
-        return config.detection_uncertainty.detections_path
-
-    detections_path = default_birdnet_detections_path(config)
-    logging.getLogger(__name__).info(
-        'No generic detection_uncertainty.detections_path configured; '
-        'falling back to BirdNET detections at %s',
-        detections_path,
-    )
-    return detections_path
+    return default_birdnet_detections_path(config)
 
 
 def resolve_output_dir(detections_path: Path, config, args: argparse.Namespace) -> Path:
@@ -113,10 +104,7 @@ def resolve_output_dir(detections_path: Path, config, args: argparse.Namespace) 
     if args.output_dir is not None:
         return args.output_dir.resolve()
 
-    if config.detection_uncertainty.output_dir is not None:
-        return config.detection_uncertainty.output_dir
-
-    return detections_path.parent
+    return config.output_dir / 'detection_uncertainty'
 
 
 def resolve_output_stem(config, args: argparse.Namespace) -> str:
@@ -172,8 +160,7 @@ def main() -> None:
     if not detections_path.exists():
         raise FileNotFoundError(
             f'Detections parquet not found: {detections_path}. '
-            'Run the relevant detection stage first or set '
-            'detection_uncertainty.detections_path.'
+            'Run the relevant detection stage first.'
         )
 
     detections_df = load_detection_dataframe(

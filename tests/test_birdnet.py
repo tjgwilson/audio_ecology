@@ -125,7 +125,6 @@ def make_config(tmp_path: Path) -> PipelineConfig:
             )
         },
         birdnet=BirdNETConfig(
-            output_dir=tmp_path / 'processed' / 'birdnet',
             model_version='2.4',
             model_backend='tf',
             min_confidence=0.4,
@@ -279,10 +278,10 @@ def test_run_birdnet_predictions_writes_location_species_csv(
         inventory_df=inventory_df,
         config=config,
         geo_model=geo_model,
-        location_species_output_dir=config.birdnet.output_dir,
+        location_species_output_dir=get_birdnet_output_dir(config),
     )
 
-    species_csv_path = config.birdnet.output_dir / 'birdnet_location_species.csv'
+    species_csv_path = get_birdnet_output_dir(config) / 'birdnet_location_species.csv'
     species_df = pl.read_csv(species_csv_path)
 
     assert species_csv_path.exists()

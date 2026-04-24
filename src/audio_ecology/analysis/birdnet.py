@@ -72,8 +72,6 @@ def get_birdnet_output_dir(config: PipelineConfig) -> Path:
     :param config: Loaded pipeline configuration.
     :return: BirdNET auxiliary output directory.
     """
-    if config.birdnet.output_dir is not None:
-        return config.birdnet.output_dir
     return config.output_dir / 'birdnet'
 
 

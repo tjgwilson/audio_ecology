@@ -119,7 +119,6 @@ class ChunkingConfig(BaseModel):
 class BirdNETConfig(BaseModel):
     """Configuration for BirdNET bird detection."""
 
-    output_dir: Path | None = None
     model_version: str = '2.4'
     model_backend: str = 'tf'
     min_confidence: float = 0.25
@@ -162,8 +161,6 @@ class BirdNETConfig(BaseModel):
 class DetectionUncertaintyConfig(BaseModel):
     """Configuration for window-level detection uncertainty summaries."""
 
-    detections_path: Path | None = None
-    output_dir: Path | None = None
     output_stem: str = 'detection_window_evidence'
     start_time: datetime | None = None
     end_time: datetime | None = None
@@ -302,30 +299,6 @@ class PipelineConfig(BaseModel):
         ):
             self.chunking.output_dir = (
                 self.project_root / self.chunking.output_dir
-            ).resolve()
-
-        if (
-            self.birdnet.output_dir is not None
-            and not self.birdnet.output_dir.is_absolute()
-        ):
-            self.birdnet.output_dir = (
-                self.project_root / self.birdnet.output_dir
-            ).resolve()
-
-        if (
-            self.detection_uncertainty.detections_path is not None
-            and not self.detection_uncertainty.detections_path.is_absolute()
-        ):
-            self.detection_uncertainty.detections_path = (
-                self.project_root / self.detection_uncertainty.detections_path
-            ).resolve()
-
-        if (
-            self.detection_uncertainty.output_dir is not None
-            and not self.detection_uncertainty.output_dir.is_absolute()
-        ):
-            self.detection_uncertainty.output_dir = (
-                self.project_root / self.detection_uncertainty.output_dir
             ).resolve()
 
         if (

@@ -36,6 +36,15 @@ from audio_ecology.profiling import ProfileRecorder
 app = typer.Typer(help='Passive acoustic monitoring pipeline.')
 
 
+def get_detection_uncertainty_output_dir(config: PipelineConfig) -> Path:
+    """Return the canonical output directory for detection uncertainty results.
+
+    :param config: Loaded pipeline configuration.
+    :return: Detection uncertainty output directory.
+    """
+    return config.output_dir / 'detection_uncertainty'
+
+
 @app.command()
 def inventory(
     config_path: Annotated[
@@ -227,11 +236,7 @@ def detection_windows(
         level=log_level,
         run_name='detection_windows',
     )
-    detections_path = (
-        config.detection_uncertainty.detections_path
-        if config.detection_uncertainty.detections_path is not None
-        else get_birdnet_detection_dataset_dir(config)
-    )
+    detections_path = get_birdnet_detection_dataset_dir(config)
     if not detections_path.exists():
         raise typer.BadParameter(
             f'Detections parquet not found: {detections_path}. '
@@ -250,7 +255,7 @@ def detection_windows(
     )
     write_noisy_or_species_windows(
         evidence_df=evidence_df,
-        output_dir=config.detection_uncertainty.output_dir or detections_path.parent,
+        output_dir=get_detection_uncertainty_output_dir(config),
         stem=output_stem,
         write_csv=config.outputs.write_csv,
     )
