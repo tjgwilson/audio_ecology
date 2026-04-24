@@ -488,33 +488,25 @@ def normalise_birdnet_predictions(
 
 def write_birdnet_detection_outputs(
     detections_df: pl.DataFrame,
-    output_dir: Path,
     dataset_dir: Path,
     write_csv: bool = False,
-) -> tuple[Path, Path | None]:
+) -> Path:
     """Write normalized BirdNET detections.
 
     :param detections_df: Normalized BirdNET detection rows.
-    :param output_dir: BirdNET auxiliary output directory.
     :param dataset_dir: Shared BirdNET detection dataset directory.
-    :param write_csv: Whether to also write a convenience CSV copy.
-    :return: Tuple of dataset directory and optional CSV path.
+    :param write_csv: Whether to also write CSV copies inside each partition.
+    :return: Detection dataset directory.
     """
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    csv_path = output_dir / f'{BIRDNET_DETECTIONS_STEM}.csv' if write_csv else None
-
-    write_detection_dataset(
+    dataset_path = write_detection_dataset(
         detections_df=detections_df,
         dataset_dir=dataset_dir,
         stem=DETECTIONS_STEM,
+        write_csv=write_csv,
     )
-    if csv_path is not None:
-        logger.info('Writing BirdNET detections CSV to %s', csv_path)
-        detections_df.write_csv(csv_path)
     logger.info('Wrote BirdNET detection outputs with %d rows', detections_df.height)
 
-    return dataset_dir, csv_path
+    return dataset_path
 
 
 def _location_species_cache_to_dataframe(
@@ -828,7 +820,6 @@ def run_birdnet_analysis(
 
     write_birdnet_detection_outputs(
         detections_df=detections_df,
-        output_dir=output_dir,
         dataset_dir=detection_dataset_dir,
         write_csv=config.outputs.write_csv,
     )

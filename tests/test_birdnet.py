@@ -537,14 +537,14 @@ def test_run_birdnet_analysis_writes_csv_when_enabled(
         / 'day=17'
         / 'detections.parquet'
     ).exists()
-    assert not (
-        output_dir
+    assert (
+        dataset_dir
         / 'year=2026'
         / 'month=04'
         / 'day=17'
-        / 'birdnet_detections.parquet'
+        / 'detections.csv'
     ).exists()
-    assert (output_dir / 'birdnet_detections.csv').exists()
+    assert not (output_dir / 'birdnet_detections.csv').exists()
 
 
 def test_load_detection_dataframe_reads_partitioned_dataset(tmp_path: Path) -> None:

@@ -140,12 +140,14 @@ def write_detection_dataset(
     detections_df: pl.DataFrame,
     dataset_dir: Path,
     stem: str = DETECTIONS_STEM,
+    write_csv: bool = False,
 ) -> Path:
     """Write detections to a date-partitioned parquet dataset.
 
     :param detections_df: Normalized detection rows to write.
     :param dataset_dir: Backend-specific dataset root directory.
     :param stem: Base file stem for parquet files within each partition.
+    :param write_csv: Whether to also write a CSV copy in each partition.
     :return: The dataset root directory.
     """
     logger.info('Writing detections parquet dataset to %s', dataset_dir)
@@ -173,5 +175,14 @@ def write_detection_dataset(
             partition_path,
         )
         partition_df.write_parquet(partition_path)
+        if write_csv:
+            csv_path = partition_dir / f'{stem}.csv'
+            logger.info(
+                'Writing %d detections CSV for %s to %s',
+                partition_df.height,
+                partition_date,
+                csv_path,
+            )
+            partition_df.write_csv(csv_path)
 
     return dataset_dir
