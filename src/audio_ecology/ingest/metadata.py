@@ -14,6 +14,7 @@ from audio_ecology.constants import (
     GUANO_TEMPERATURE_INT_FIELD,
     GUANO_TIMESTAMP_FIELD,
     GUANO_TIMESTAMP_FORMAT,
+    LOCATION_SOURCE_DEPLOYMENT_CONFIG,
     LOCATION_SOURCE_DEVICE_CONFIG,
     LOCATION_SOURCE_GUANO,
     LOCATION_SOURCE_MISSING,
@@ -23,8 +24,29 @@ from audio_ecology.constants import (
     TIMESTAMP_SOURCE_MISSING,
 )
 from audio_ecology.models import AudioFileRecord
+from audio_ecology.solar import calculate_solar_metadata
 
 logger = logging.getLogger(__name__)
+
+
+def resolve_deployment(
+    device_id: str | None,
+    config: PipelineConfig,
+) -> tuple[str | None, object | None]:
+    """Resolve the active deployment for a device, if configured.
+
+    :param device_id: Parsed device ID.
+    :param config: Pipeline configuration.
+    :return: Deployment ID and config object, or ``(None, None)``.
+    """
+    if device_id is None:
+        return None, None
+
+    for deployment_id, deployment_config in config.deployments.items():
+        if deployment_config.device_id == device_id:
+            return deployment_id, deployment_config
+
+    return None, None
 
 
 def extract_device_id(file_name: str) -> str | None:
@@ -177,25 +199,66 @@ def resolve_location(
     guano_latitude: float | None,
     guano_longitude: float | None,
     config: PipelineConfig,
-) -> tuple[float | None, float | None, str, str | None]:
+) -> tuple[
+    float | None,
+    float | None,
+    str,
+    str | None,
+    str | None,
+    str | None,
+    list[str],
+]:
     """Resolve final location using GUANO first, then config fallbacks.
 
     :param device_id: Parsed device ID.
     :param guano_latitude: Latitude from GUANO.
     :param guano_longitude: Longitude from GUANO.
     :param config: Pipeline configuration.
-    :return: Latitude, longitude, source, and optional device label.
+    :return: Latitude, longitude, source, device label, deployment ID, habitat
+        label, and deployment detection targets.
     """
     device_label: str | None = None
+    deployment_id, deployment_config = resolve_deployment(
+        device_id=device_id,
+        config=config,
+    )
+    habitat_label = (
+        deployment_config.habitat_label if deployment_config is not None else None
+    )
+    detection_targets = (
+        list(deployment_config.detection_targets)
+        if deployment_config is not None
+        else []
+    )
+
+    if device_id is not None and device_id in config.devices:
+        device_label = config.devices[device_id].label
 
     if guano_latitude is not None and guano_longitude is not None:
-        if device_id in config.devices:
-            device_label = config.devices[device_id].label
         return (
             guano_latitude,
             guano_longitude,
             LOCATION_SOURCE_GUANO,
             device_label,
+            deployment_id,
+            habitat_label,
+            detection_targets,
+        )
+
+    if (
+        deployment_config is not None
+        and deployment_config.fallback_location is not None
+        and deployment_config.fallback_location.latitude is not None
+        and deployment_config.fallback_location.longitude is not None
+    ):
+        return (
+            deployment_config.fallback_location.latitude,
+            deployment_config.fallback_location.longitude,
+            LOCATION_SOURCE_DEPLOYMENT_CONFIG,
+            device_label,
+            deployment_id,
+            habitat_label,
+            detection_targets,
         )
 
     if device_id is not None and device_id in config.devices:
@@ -212,6 +275,9 @@ def resolve_location(
                 device_config.fallback_location.longitude,
                 LOCATION_SOURCE_DEVICE_CONFIG,
                 device_label,
+                deployment_id,
+                habitat_label,
+                detection_targets,
             )
 
     if (
@@ -224,9 +290,20 @@ def resolve_location(
             config.fallback_location.longitude,
             LOCATION_SOURCE_SITE_CONFIG,
             device_label,
+            deployment_id,
+            habitat_label,
+            detection_targets,
         )
 
-    return None, None, LOCATION_SOURCE_MISSING, device_label
+    return (
+        None,
+        None,
+        LOCATION_SOURCE_MISSING,
+        device_label,
+        deployment_id,
+        habitat_label,
+        detection_targets,
+    )
 
 
 def build_audio_file_record(
@@ -265,7 +342,15 @@ def build_audio_file_record(
         timestamp = None
         timestamp_source = TIMESTAMP_SOURCE_MISSING
 
-    latitude, longitude, location_source, device_label = resolve_location(
+    (
+        latitude,
+        longitude,
+        location_source,
+        device_label,
+        deployment_id,
+        habitat_label,
+        detection_targets,
+    ) = resolve_location(
         device_id=device_id,
         guano_latitude=guano_latitude,
         guano_longitude=guano_longitude,
@@ -278,15 +363,28 @@ def build_audio_file_record(
         logger.warning('WAV metadata read failed for %s: %s', file_path, wav_note)
 
     note_text = '; '.join(notes) if notes else None
+    solar_metadata = calculate_solar_metadata(
+        timestamp=timestamp,
+        latitude=latitude,
+        longitude=longitude,
+    )
 
     record = AudioFileRecord(
         file_path=file_path,
         file_name=file_name,
         device_id=device_id,
         device_label=device_label,
+        deployment_id=deployment_id,
+        habitat_label=habitat_label,
+        detection_targets=detection_targets,
         timestamp=timestamp,
         timestamp_source=timestamp_source,
         filename_timestamp=filename_timestamp,
+        sunrise_timestamp=solar_metadata.sunrise_timestamp,
+        sunset_timestamp=solar_metadata.sunset_timestamp,
+        minutes_from_sunrise=solar_metadata.minutes_from_sunrise,
+        minutes_to_sunset=solar_metadata.minutes_to_sunset,
+        is_daylight=solar_metadata.is_daylight,
         sample_rate_hz=sample_rate_hz,
         duration_s=duration_s,
         file_size_bytes=file_path.stat().st_size,

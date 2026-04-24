@@ -8,7 +8,7 @@ from pathlib import Path
 import polars as pl
 
 from audio_ecology.analysis.birdnet import (
-    get_birdnet_output_dir,
+    get_birdnet_detection_dataset_dir,
     run_birdnet_analysis,
 )
 from audio_ecology.config import load_config
@@ -16,7 +16,7 @@ from audio_ecology.logging_config import configure_pipeline_logging
 from audio_ecology.profiling import ProfileRecorder
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_CONFIG_PATH = SCRIPT_DIR / 'config_files' / 'config.yaml'
+DEFAULT_CONFIG_PATH = SCRIPT_DIR / 'config_files' / 'wyke_lodge.yaml'
 
 
 def parse_args() -> argparse.Namespace:
@@ -88,7 +88,7 @@ def main() -> None:
 
     print(
         f'Wrote {detections_df.height} BirdNET detections to '
-        f'{get_birdnet_output_dir(config)}'
+        f'{get_birdnet_detection_dataset_dir(config)}'
     )
     if profile_paths is not None:
         print(f'Wrote profile reports to {profile_paths[0].parent}')

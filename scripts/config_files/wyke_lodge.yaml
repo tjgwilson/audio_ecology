@@ -19,6 +19,13 @@ fallback_location:
 devices:
   24F319046907737B:
     label: audiomoth_1
+
+deployments:
+  wyke_lodge_spring_2026_a:
+    device_id: 24F319046907737B
+    habitat_label: mixed_woodland
+    detection_targets:
+      - bird
     fallback_location:
       latitude: 50.432584
       longitude: -3.672039
@@ -38,7 +45,6 @@ chunking:
 birdnet:
   # The run_birds.py component decides whether BirdNET runs; this block only
   # stores BirdNET parameters.
-  output_dir: data/processed/Wyke_lodge/birdnet
   model_version: "2.4"
   model_backend: tf
   min_confidence: 0.25
@@ -51,11 +57,9 @@ birdnet:
   overlap_s: 0.0
 
 detection_uncertainty:
-  detections_path: data/processed/Wyke_lodge/birdnet/birdnet_detections.parquet
-  output_dir: data/processed/Wyke_lodge/detection_uncertainty
   output_stem: detection_window_evidence
   start_time: "2026-04-20T12:35:00+00:00"
-  end_time: "2026-04-20T13:07:00+00:00"
+  duration_s: 1920
   event_gap_s: 30.0
   min_confidence: 0.25
   possible_threshold: 0.40

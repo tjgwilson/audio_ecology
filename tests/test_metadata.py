@@ -5,10 +5,12 @@ from pathlib import Path
 
 from audio_ecology.config import (
     DeviceConfig,
+    DeploymentConfig,
     LocationConfig,
     PipelineConfig,
 )
 from audio_ecology.constants import (
+    LOCATION_SOURCE_DEPLOYMENT_CONFIG,
     LOCATION_SOURCE_DEVICE_CONFIG,
     LOCATION_SOURCE_GUANO,
     LOCATION_SOURCE_SITE_CONFIG,
@@ -40,6 +42,17 @@ def make_config(tmp_path: Path) -> PipelineConfig:
                 fallback_location=LocationConfig(
                     latitude=50.1,
                     longitude=-3.2,
+                ),
+            )
+        },
+        deployments={
+            'wyke_woods_spring_2026': DeploymentConfig(
+                device_id='24F319046907737B',
+                habitat_label='mixed_woodland',
+                detection_targets=['bird', 'bat'],
+                fallback_location=LocationConfig(
+                    latitude=50.432584,
+                    longitude=-3.672039,
                 ),
             )
         },
@@ -77,6 +90,9 @@ def test_build_audio_file_record_uses_guano_timestamp_and_location(
 
     assert record.device_id == '24F319046907737B'
     assert record.device_label == 'am_1'
+    assert record.deployment_id == 'wyke_woods_spring_2026'
+    assert record.habitat_label == 'mixed_woodland'
+    assert record.detection_targets == ['bird', 'bat']
     assert record.timestamp == datetime(
         2026, 4, 16, 21, 43, 0, tzinfo=timezone.utc
     )
@@ -85,6 +101,11 @@ def test_build_audio_file_record_uses_guano_timestamp_and_location(
     assert record.latitude == 50.432584
     assert record.longitude == -3.672039
     assert record.location_source == LOCATION_SOURCE_GUANO
+    assert record.sunrise_timestamp is not None
+    assert record.sunset_timestamp is not None
+    assert record.minutes_from_sunrise is not None
+    assert record.minutes_to_sunset is not None
+    assert record.is_daylight is False
     assert record.temperature_int_c == 18.5
     assert record.sample_rate_hz == 16000
     assert record.duration_s == 2.0
@@ -106,10 +127,35 @@ def test_build_audio_file_record_falls_back_to_filename_timestamp_and_device_loc
 
     assert record.timestamp == datetime(2026, 4, 17, 22, 35, 41)
     assert record.timestamp_source == TIMESTAMP_SOURCE_FILENAME
+    assert record.latitude == 50.432584
+    assert record.longitude == -3.672039
+    assert record.location_source == LOCATION_SOURCE_DEPLOYMENT_CONFIG
+    assert record.deployment_id == 'wyke_woods_spring_2026'
+    assert record.habitat_label == 'mixed_woodland'
+    assert record.detection_targets == ['bird', 'bat']
+    assert record.sunrise_timestamp is not None
+    assert record.sunset_timestamp is not None
+    assert record.temperature_int_c is None
+
+
+def test_build_audio_file_record_falls_back_to_device_location_without_deployment(
+    tmp_path: Path,
+) -> None:
+    config = make_config(tmp_path)
+    config.deployments = {}
+    wav_path = create_test_wav(
+        tmp_path / 'raw' / '24F319046907737B_20260417_223541.WAV',
+        guano_fields={},
+    )
+
+    record = build_audio_file_record(wav_path, config)
+
     assert record.latitude == 50.1
     assert record.longitude == -3.2
     assert record.location_source == LOCATION_SOURCE_DEVICE_CONFIG
-    assert record.temperature_int_c is None
+    assert record.deployment_id is None
+    assert record.habitat_label is None
+    assert record.detection_targets == []
 
 
 def test_build_audio_file_record_falls_back_to_site_location(

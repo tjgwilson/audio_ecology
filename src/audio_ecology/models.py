@@ -9,7 +9,13 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 TimestampSource = Literal['guano', 'filename', 'missing']
-LocationSource = Literal['guano', 'device_config', 'site_config', 'missing']
+LocationSource = Literal[
+    'guano',
+    'deployment_config',
+    'device_config',
+    'site_config',
+    'missing',
+]
 
 
 class AudioFileRecord(BaseModel):
@@ -19,10 +25,18 @@ class AudioFileRecord(BaseModel):
     file_name: str
     device_id: str | None = None
     device_label: str | None = None
+    deployment_id: str | None = None
+    habitat_label: str | None = None
+    detection_targets: list[str] = Field(default_factory=list)
 
     timestamp: datetime | None = None
     timestamp_source: TimestampSource = 'missing'
     filename_timestamp: datetime | None = None
+    sunrise_timestamp: datetime | None = None
+    sunset_timestamp: datetime | None = None
+    minutes_from_sunrise: float | None = None
+    minutes_to_sunset: float | None = None
+    is_daylight: bool | None = None
 
     sample_rate_hz: int | None = None
     duration_s: float | None = None
@@ -47,6 +61,9 @@ class AudioChunkRecord(BaseModel):
     chunk_file_path: Path | None = None
     device_id: str | None = None
     device_label: str | None = None
+    deployment_id: str | None = None
+    habitat_label: str | None = None
+    detection_targets: list[str] = Field(default_factory=list)
 
     chunk_index: int
     chunk_start_s: float
@@ -56,6 +73,11 @@ class AudioChunkRecord(BaseModel):
     timestamp: datetime | None = None
     latitude: float | None = None
     longitude: float | None = None
+    sunrise_timestamp: datetime | None = None
+    sunset_timestamp: datetime | None = None
+    minutes_from_sunrise: float | None = None
+    minutes_to_sunset: float | None = None
+    is_daylight: bool | None = None
 
     sample_rate_hz: int | None = None
     analysis_targets: list[str] = Field(default_factory=list)
@@ -80,7 +102,15 @@ class BirdDetectionRecord(BaseModel):
     timestamp: datetime | None = None
     latitude: float | None = None
     longitude: float | None = None
+    sunrise_timestamp: datetime | None = None
+    sunset_timestamp: datetime | None = None
+    minutes_from_sunrise: float | None = None
+    minutes_to_sunset: float | None = None
+    is_daylight: bool | None = None
     temperature_int_c: float | None = None
+    deployment_id: str | None = None
+    habitat_label: str | None = None
+    detection_targets: list[str] = Field(default_factory=list)
 
     scientific_name: str
     common_name: str

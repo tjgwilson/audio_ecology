@@ -8,12 +8,16 @@ from pathlib import Path
 
 import polars as pl
 
-from audio_ecology.analysis.birdnet import get_birdnet_output_dir
+from audio_ecology.analysis.birdnet import (
+    BIRDNET_DETECTION_SCHEMA,
+    get_birdnet_detection_dataset_dir,
+)
 from audio_ecology.analysis.evidence import (
     DETECTION_WINDOW_EVIDENCE_STEM,
     build_noisy_or_species_time_period,
     write_noisy_or_species_windows,
 )
+from audio_ecology.analysis.storage import load_detection_dataframe
 from audio_ecology.config import load_config
 from audio_ecology.logging_config import configure_pipeline_logging
 
@@ -22,7 +26,10 @@ DEFAULT_CONFIG_PATH = SCRIPT_DIR / 'config_files' / 'wyke_lodge.yaml'
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments."""
+    """Parse command-line arguments.
+
+    :return: Parsed command-line arguments.
+    """
     parser = argparse.ArgumentParser(
         description='Aggregate detections into window-level evidence.'
     )
@@ -65,40 +72,48 @@ def parse_args() -> argparse.Namespace:
 
 
 def default_birdnet_detections_path(config) -> Path:
-    """Return the current BirdNET detections path as a compatibility fallback."""
-    return get_birdnet_output_dir(config) / 'birdnet_detections.parquet'
+    """Return the canonical BirdNET detections dataset path.
+
+    :param config: Loaded pipeline configuration.
+    :return: BirdNET detection dataset directory.
+    """
+    return get_birdnet_detection_dataset_dir(config)
 
 
 def resolve_detections_path(config, args: argparse.Namespace) -> Path:
-    """Resolve the detections parquet path for this evidence run."""
+    """Resolve the detections dataset path for this evidence run.
+
+    :param config: Loaded pipeline configuration.
+    :param args: Parsed command-line arguments.
+    :return: Detection dataset path to read.
+    """
     if args.detections_path is not None:
         return args.detections_path.resolve()
 
-    if config.detection_uncertainty.detections_path is not None:
-        return config.detection_uncertainty.detections_path
-
-    detections_path = default_birdnet_detections_path(config)
-    logging.getLogger(__name__).info(
-        'No generic detection_uncertainty.detections_path configured; '
-        'falling back to BirdNET detections at %s',
-        detections_path,
-    )
-    return detections_path
+    return default_birdnet_detections_path(config)
 
 
 def resolve_output_dir(detections_path: Path, config, args: argparse.Namespace) -> Path:
-    """Resolve the output directory for evidence files."""
+    """Resolve the output directory for evidence files.
+
+    :param detections_path: Detection dataset path used for this run.
+    :param config: Loaded pipeline configuration.
+    :param args: Parsed command-line arguments.
+    :return: Output directory for evidence files.
+    """
     if args.output_dir is not None:
         return args.output_dir.resolve()
 
-    if config.detection_uncertainty.output_dir is not None:
-        return config.detection_uncertainty.output_dir
-
-    return detections_path.parent
+    return config.output_dir / 'detection_uncertainty'
 
 
 def resolve_output_stem(config, args: argparse.Namespace) -> str:
-    """Resolve the output stem for evidence files."""
+    """Resolve the output stem for evidence files.
+
+    :param config: Loaded pipeline configuration.
+    :param args: Parsed command-line arguments.
+    :return: Output file stem for evidence files.
+    """
     if args.output_stem is not None:
         return str(args.output_stem)
 
@@ -109,14 +124,21 @@ def resolve_output_stem(config, args: argparse.Namespace) -> str:
 
 
 def main() -> None:
-    """Run window-level detection uncertainty summaries."""
+    """Run window-level detection uncertainty summaries.
+
+    :return: ``None``.
+    :raises ValueError: If the configured window bounds are incomplete.
+    :raises FileNotFoundError: If the configured detection dataset does not exist.
+    """
     args = parse_args()
     config = load_config(args.config_path.resolve())
     uncertainty_config = config.detection_uncertainty
-    if uncertainty_config.start_time is None or uncertainty_config.end_time is None:
+    resolved_start_time = uncertainty_config.resolved_start_time
+    resolved_end_time = uncertainty_config.resolved_end_time
+    if resolved_start_time is None or resolved_end_time is None:
         raise ValueError(
-            'Set detection_uncertainty.start_time and '
-            'detection_uncertainty.end_time in the config.'
+            'Set detection_uncertainty.start_time together with end_time '
+            'or duration_s in the config.'
         )
 
     log_file_path = configure_pipeline_logging(
@@ -138,15 +160,17 @@ def main() -> None:
     if not detections_path.exists():
         raise FileNotFoundError(
             f'Detections parquet not found: {detections_path}. '
-            'Run the relevant detection stage first or set '
-            'detection_uncertainty.detections_path.'
+            'Run the relevant detection stage first.'
         )
 
-    detections_df = pl.read_parquet(detections_path)
+    detections_df = load_detection_dataframe(
+        detections_path,
+        schema=BIRDNET_DETECTION_SCHEMA,
+    )
     evidence_df = build_noisy_or_species_time_period(
         detections_df=detections_df,
-        start_time=uncertainty_config.start_time,
-        end_time=uncertainty_config.end_time,
+        start_time=resolved_start_time,
+        end_time=resolved_end_time,
         config=uncertainty_config,
     )
     parquet_path, csv_path = write_noisy_or_species_windows(
@@ -158,8 +182,8 @@ def main() -> None:
 
     message = (
         f'Wrote {evidence_df.height} window evidence rows to {parquet_path} '
-        f'for {uncertainty_config.start_time.isoformat()} to '
-        f'{uncertainty_config.end_time.isoformat()} '
+        f'for {resolved_start_time.isoformat()} to '
+        f'{resolved_end_time.isoformat()} '
         f'event_gap_s={uncertainty_config.event_gap_s:g}'
     )
     if csv_path is not None:

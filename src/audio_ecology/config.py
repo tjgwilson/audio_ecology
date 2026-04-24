@@ -2,14 +2,41 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from audio_ecology.constants import ALLOWED_DETECTION_TARGETS
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_detection_target_labels(
+    labels: list[str],
+    field_name: str,
+) -> list[str]:
+    """Validate configured target labels against the supported vocabulary.
+
+    :param labels: Configured target labels.
+    :param field_name: Name of the config field being validated.
+    :return: Validated labels unchanged.
+    :raises ValueError: If any labels are unsupported.
+    """
+    invalid_labels = [
+        label for label in labels if label not in ALLOWED_DETECTION_TARGETS
+    ]
+    if invalid_labels:
+        allowed_values = ', '.join(ALLOWED_DETECTION_TARGETS)
+        invalid_values = ', '.join(sorted(invalid_labels))
+        raise ValueError(
+            f'{field_name} contains unsupported values: {invalid_values}. '
+            f'Allowed values are: {allowed_values}'
+        )
+
+    return labels
 
 
 class LocationConfig(BaseModel):
@@ -26,6 +53,28 @@ class DeviceConfig(BaseModel):
     fallback_location: LocationConfig | None = None
 
 
+class DeploymentConfig(BaseModel):
+    """Configuration for one active recorder deployment."""
+
+    device_id: str
+    habitat_label: str | None = None
+    detection_targets: list[str] = Field(default_factory=list)
+    fallback_location: LocationConfig | None = None
+
+    @field_validator('detection_targets')
+    @classmethod
+    def validate_detection_targets(cls, labels: list[str]) -> list[str]:
+        """Validate deployment detection target labels.
+
+        :param labels: Configured detection targets.
+        :return: Validated detection targets.
+        """
+        return _validate_detection_target_labels(
+            labels,
+            field_name='deployments.detection_targets',
+        )
+
+
 class ChunkingConfig(BaseModel):
     """Configuration for optional audio chunking."""
 
@@ -36,6 +85,19 @@ class ChunkingConfig(BaseModel):
     write_audio_files: bool = False
     output_dir: Path | None = None
     analysis_targets: list[str] = Field(default_factory=list)
+
+    @field_validator('analysis_targets')
+    @classmethod
+    def validate_analysis_targets(cls, labels: list[str]) -> list[str]:
+        """Validate chunking analysis target labels.
+
+        :param labels: Configured analysis targets.
+        :return: Validated analysis targets.
+        """
+        return _validate_detection_target_labels(
+            labels,
+            field_name='chunking.analysis_targets',
+        )
 
     @model_validator(mode='after')
     def validate_chunking(self) -> 'ChunkingConfig':
@@ -57,7 +119,6 @@ class ChunkingConfig(BaseModel):
 class BirdNETConfig(BaseModel):
     """Configuration for BirdNET bird detection."""
 
-    output_dir: Path | None = None
     model_version: str = '2.4'
     model_backend: str = 'tf'
     min_confidence: float = 0.25
@@ -100,27 +161,67 @@ class BirdNETConfig(BaseModel):
 class DetectionUncertaintyConfig(BaseModel):
     """Configuration for window-level detection uncertainty summaries."""
 
-    detections_path: Path | None = None
-    output_dir: Path | None = None
     output_stem: str = 'detection_window_evidence'
     start_time: datetime | None = None
     end_time: datetime | None = None
+    duration_s: float | None = None
     event_gap_s: float = 30.0
     min_confidence: float = 0.25
     possible_threshold: float = 0.40
     probable_threshold: float = 0.70
     strong_threshold: float = 0.90
 
+    @property
+    def resolved_start_time(self) -> datetime | None:
+        """Return the resolved window start time.
+
+        :return: Window start time, or ``None`` when unset.
+        """
+        return self.start_time
+
+    @property
+    def resolved_end_time(self) -> datetime | None:
+        """Return the resolved window end time.
+
+        :return: Explicit end time or start time plus duration.
+        """
+        if self.end_time is not None:
+            return self.end_time
+
+        if self.start_time is not None and self.duration_s is not None:
+            return self.start_time + timedelta(seconds=self.duration_s)
+
+        return None
+
     @model_validator(mode='after')
     def validate_detection_uncertainty(self) -> 'DetectionUncertaintyConfig':
         """Validate detection uncertainty settings."""
-        if (
-            self.start_time is not None
-            and self.end_time is not None
-            and self.end_time <= self.start_time
+        if self.start_time is not None and self.end_time is not None and (
+            self.end_time <= self.start_time
         ):
             raise ValueError(
                 'detection_uncertainty.end_time must be after start_time'
+            )
+
+        if self.duration_s is not None and self.duration_s <= 0:
+            raise ValueError('detection_uncertainty.duration_s must be greater than 0')
+
+        has_start_time = self.start_time is not None
+        has_end_time = self.end_time is not None
+        has_duration = self.duration_s is not None
+        if has_end_time and has_duration:
+            raise ValueError(
+                'detection_uncertainty may use end_time or duration_s, but not both'
+            )
+
+        if has_start_time and not (has_end_time or has_duration):
+            raise ValueError(
+                'detection_uncertainty.start_time requires end_time or duration_s'
+            )
+
+        if (has_end_time or has_duration) and not has_start_time:
+            raise ValueError(
+                'detection_uncertainty.end_time and duration_s require start_time'
             )
 
         if self.event_gap_s < 0:
@@ -172,6 +273,7 @@ class PipelineConfig(BaseModel):
     site_name: str
     fallback_location: LocationConfig | None = None
     devices: dict[str, DeviceConfig] = Field(default_factory=dict)
+    deployments: dict[str, DeploymentConfig] = Field(default_factory=dict)
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
     birdnet: BirdNETConfig = Field(default_factory=BirdNETConfig)
     detection_uncertainty: DetectionUncertaintyConfig = Field(
@@ -200,36 +302,20 @@ class PipelineConfig(BaseModel):
             ).resolve()
 
         if (
-            self.birdnet.output_dir is not None
-            and not self.birdnet.output_dir.is_absolute()
-        ):
-            self.birdnet.output_dir = (
-                self.project_root / self.birdnet.output_dir
-            ).resolve()
-
-        if (
-            self.detection_uncertainty.detections_path is not None
-            and not self.detection_uncertainty.detections_path.is_absolute()
-        ):
-            self.detection_uncertainty.detections_path = (
-                self.project_root / self.detection_uncertainty.detections_path
-            ).resolve()
-
-        if (
-            self.detection_uncertainty.output_dir is not None
-            and not self.detection_uncertainty.output_dir.is_absolute()
-        ):
-            self.detection_uncertainty.output_dir = (
-                self.project_root / self.detection_uncertainty.output_dir
-            ).resolve()
-
-        if (
             self.logging.output_dir is not None
             and not self.logging.output_dir.is_absolute()
         ):
             self.logging.output_dir = (
                 self.project_root / self.logging.output_dir
             ).resolve()
+
+        deployment_device_ids = [
+            deployment.device_id for deployment in self.deployments.values()
+        ]
+        if len(deployment_device_ids) != len(set(deployment_device_ids)):
+            raise ValueError(
+                'deployments must contain at most one active deployment per device_id'
+            )
 
         return self
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import importlib
 import importlib.util
 import logging
@@ -12,8 +12,16 @@ from typing import Any
 import polars as pl
 
 from audio_ecology.analysis.checkpointing import AnalysisCheckpointStore
+from audio_ecology.analysis.storage import (
+    DETECTIONS_STEM,
+    backend_partition_name,
+    get_detection_dataset_dir,
+    load_detection_dataframe,
+    write_detection_dataset,
+)
 from audio_ecology.config import PipelineConfig
 from audio_ecology.models import BirdDetectionRecord
+from audio_ecology.solar import calculate_solar_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +39,15 @@ BIRDNET_DETECTION_SCHEMA = {
     'timestamp': pl.Utf8,
     'latitude': pl.Float64,
     'longitude': pl.Float64,
+    'sunrise_timestamp': pl.Utf8,
+    'sunset_timestamp': pl.Utf8,
+    'minutes_from_sunrise': pl.Float64,
+    'minutes_to_sunset': pl.Float64,
+    'is_daylight': pl.Boolean,
     'temperature_int_c': pl.Float64,
+    'deployment_id': pl.Utf8,
+    'habitat_label': pl.Utf8,
+    'detection_targets': pl.List(pl.Utf8),
     'scientific_name': pl.Utf8,
     'common_name': pl.Utf8,
     'confidence': pl.Float64,
@@ -57,25 +73,49 @@ LocationSpeciesCache = dict[
 
 
 def get_birdnet_output_dir(config: PipelineConfig) -> Path:
-    """Return the directory used for normalized BirdNET outputs."""
-    if config.birdnet.output_dir is not None:
-        return config.birdnet.output_dir
+    """Return the directory used for BirdNET-specific auxiliary outputs.
+
+    :param config: Loaded pipeline configuration.
+    :return: BirdNET auxiliary output directory.
+    """
     return config.output_dir / 'birdnet'
+
+
+def get_birdnet_detection_dataset_dir(
+    config: PipelineConfig,
+) -> Path:
+    """Return the canonical shared detection dataset directory for BirdNET.
+
+    :param config: Loaded pipeline configuration.
+    :return: Shared BirdNET detection dataset directory.
+    """
+    return get_detection_dataset_dir(
+        output_dir=config.output_dir,
+        analysis_backend=BIRDNET_BACKEND,
+    )
 
 
 def get_birdnet_checkpoint_store(
     config: PipelineConfig,
 ) -> AnalysisCheckpointStore:
-    """Return the checkpoint store used for BirdNET detections."""
+    """Return the checkpoint store used for BirdNET detections.
+
+    :param config: Loaded pipeline configuration.
+    :return: Configured BirdNET checkpoint store.
+    """
     return AnalysisCheckpointStore(
-        output_dir=get_birdnet_output_dir(config),
-        backend_name=BIRDNET_BACKEND,
+        output_dir=config.output_dir,
+        backend_name=backend_partition_name(BIRDNET_BACKEND),
         schema=BIRDNET_DETECTION_SCHEMA,
     )
 
 
 def birdnet_week_from_timestamp(timestamp: datetime | None) -> int | None:
-    """Map a timestamp to BirdNET's 1-48 four-weeks-per-month index."""
+    """Map a timestamp to BirdNET's 1-48 four-weeks-per-month index.
+
+    :param timestamp: Timestamp to map.
+    :return: BirdNET week index or ``None`` when timestamp is missing.
+    """
     if timestamp is None:
         return None
 
@@ -425,6 +465,17 @@ def normalise_birdnet_predictions(
         scientific_name, common_name = _split_species_name(species_name)
         detection_start_s = _time_to_seconds(prediction_row['start_time'])
         detection_end_s = _time_to_seconds(prediction_row['end_time'])
+        detection_timestamp = None
+        timestamp_value = metadata.get('timestamp')
+        if isinstance(timestamp_value, datetime):
+            detection_timestamp = timestamp_value + timedelta(
+                seconds=detection_start_s
+            )
+        solar_metadata = calculate_solar_metadata(
+            timestamp=detection_timestamp,
+            latitude=metadata.get('latitude'),
+            longitude=metadata.get('longitude'),
+        )
 
         detection_record = BirdDetectionRecord(
             file_path=Path(str(metadata['file_path'])),
@@ -435,7 +486,15 @@ def normalise_birdnet_predictions(
             timestamp=metadata.get('timestamp'),
             latitude=metadata.get('latitude'),
             longitude=metadata.get('longitude'),
+            sunrise_timestamp=solar_metadata.sunrise_timestamp,
+            sunset_timestamp=solar_metadata.sunset_timestamp,
+            minutes_from_sunrise=solar_metadata.minutes_from_sunrise,
+            minutes_to_sunset=solar_metadata.minutes_to_sunset,
+            is_daylight=solar_metadata.is_daylight,
             temperature_int_c=metadata.get('temperature_int_c'),
+            deployment_id=metadata.get('deployment_id'),
+            habitat_label=metadata.get('habitat_label'),
+            detection_targets=metadata.get('detection_targets') or [],
             scientific_name=scientific_name,
             common_name=common_name,
             confidence=confidence,
@@ -455,24 +514,25 @@ def normalise_birdnet_predictions(
 
 def write_birdnet_detection_outputs(
     detections_df: pl.DataFrame,
-    output_dir: Path,
-    stem: str = BIRDNET_DETECTIONS_STEM,
+    dataset_dir: Path,
     write_csv: bool = False,
-) -> tuple[Path, Path | None]:
-    """Write normalized BirdNET detections."""
-    output_dir.mkdir(parents=True, exist_ok=True)
+) -> Path:
+    """Write normalized BirdNET detections.
 
-    parquet_path = output_dir / f'{stem}.parquet'
-    csv_path = output_dir / f'{stem}.csv' if write_csv else None
-
-    logger.info('Writing BirdNET detections parquet to %s', parquet_path)
-    detections_df.write_parquet(parquet_path)
-    if csv_path is not None:
-        logger.info('Writing BirdNET detections CSV to %s', csv_path)
-        detections_df.write_csv(csv_path)
+    :param detections_df: Normalized BirdNET detection rows.
+    :param dataset_dir: Shared BirdNET detection dataset directory.
+    :param write_csv: Whether to also write CSV copies inside each partition.
+    :return: Detection dataset directory.
+    """
+    dataset_path = write_detection_dataset(
+        detections_df=detections_df,
+        dataset_dir=dataset_dir,
+        stem=DETECTIONS_STEM,
+        write_csv=write_csv,
+    )
     logger.info('Wrote BirdNET detection outputs with %d rows', detections_df.height)
 
-    return parquet_path, csv_path
+    return dataset_path
 
 
 def _location_species_cache_to_dataframe(
@@ -699,9 +759,17 @@ def run_birdnet_analysis(
     inventory_df: pl.DataFrame,
     overwrite_checkpoints: bool = False,
 ) -> pl.DataFrame:
-    """Run BirdNET and return normalized detection records."""
+    """Run BirdNET and return normalized detection records.
+
+    :param config: Loaded pipeline configuration.
+    :param inventory_df: Inventory rows to analyse.
+    :param overwrite_checkpoints: Whether to ignore existing file checkpoints.
+    :return: Normalized BirdNET detection rows.
+    """
     output_dir = get_birdnet_output_dir(config)
     output_dir.mkdir(parents=True, exist_ok=True)
+    detection_dataset_dir = get_birdnet_detection_dataset_dir(config)
+    detection_dataset_dir.mkdir(parents=True, exist_ok=True)
     logger.info('Starting BirdNET analysis')
 
     checkpoint_store = get_birdnet_checkpoint_store(config)
@@ -778,7 +846,7 @@ def run_birdnet_analysis(
 
     write_birdnet_detection_outputs(
         detections_df=detections_df,
-        output_dir=output_dir,
+        dataset_dir=detection_dataset_dir,
         write_csv=config.outputs.write_csv,
     )
     logger.info('Finished BirdNET analysis')

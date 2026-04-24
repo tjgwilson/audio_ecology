@@ -12,14 +12,17 @@ from audio_ecology.analysis.birdnet import (
     BIRDNET_BACKEND,
     birdnet_week_from_timestamp,
     get_birdnet_checkpoint_store,
+    get_birdnet_detection_dataset_dir,
     get_birdnet_output_dir,
     load_birdnet_model,
     normalise_birdnet_predictions,
     run_birdnet_analysis,
     run_birdnet_predictions,
 )
+from audio_ecology.analysis.storage import load_detection_dataframe
 from audio_ecology.config import (
     BirdNETConfig,
+    DeploymentConfig,
     LocationConfig,
     OutputConfig,
     PipelineConfig,
@@ -110,8 +113,18 @@ def make_config(tmp_path: Path) -> PipelineConfig:
             longitude=-2.1,
         ),
         devices={},
+        deployments={
+            'test_site_deployment': DeploymentConfig(
+                device_id='24F319046907737B',
+                habitat_label='mixed_woodland',
+                detection_targets=['bird', 'bat'],
+                fallback_location=LocationConfig(
+                    latitude=50.432584,
+                    longitude=-3.672039,
+                ),
+            )
+        },
         birdnet=BirdNETConfig(
-            output_dir=tmp_path / 'processed' / 'birdnet',
             model_version='2.4',
             model_backend='tf',
             min_confidence=0.4,
@@ -135,6 +148,9 @@ def make_inventory_df(tmp_path: Path) -> pl.DataFrame:
                 'timestamp': datetime(
                     2026, 4, 17, 22, 35, 41, tzinfo=timezone.utc
                 ),
+                'deployment_id': 'test_site_deployment',
+                'habitat_label': 'mixed_woodland',
+                'detection_targets': ['bird', 'bat'],
                 'latitude': 50.432584,
                 'longitude': -3.672039,
                 'temperature_int_c': 18.5,
@@ -262,10 +278,10 @@ def test_run_birdnet_predictions_writes_location_species_csv(
         inventory_df=inventory_df,
         config=config,
         geo_model=geo_model,
-        location_species_output_dir=config.birdnet.output_dir,
+        location_species_output_dir=get_birdnet_output_dir(config),
     )
 
-    species_csv_path = config.birdnet.output_dir / 'birdnet_location_species.csv'
+    species_csv_path = get_birdnet_output_dir(config) / 'birdnet_location_species.csv'
     species_df = pl.read_csv(species_csv_path)
 
     assert species_csv_path.exists()
@@ -459,6 +475,13 @@ def test_normalise_birdnet_predictions_adds_inventory_metadata_and_temperature(
     assert detection['latitude'] == 50.432584
     assert detection['longitude'] == -3.672039
     assert detection['temperature_int_c'] == 18.5
+    assert detection['deployment_id'] == 'test_site_deployment'
+    assert detection['habitat_label'] == 'mixed_woodland'
+    assert detection['detection_targets'] == ['bird', 'bat']
+    assert detection['sunrise_timestamp'] is not None
+    assert detection['sunset_timestamp'] is not None
+    assert detection['minutes_from_sunrise'] is not None
+    assert detection['minutes_to_sunset'] is not None
     assert detection['analysis_backend'] == BIRDNET_BACKEND
     assert detection['model_name'] == 'acoustic-2.4-tf'
 
@@ -486,6 +509,9 @@ def test_run_birdnet_analysis_writes_and_reuses_checkpoints(
 
     checkpoint_store = get_birdnet_checkpoint_store(config)
     audio_path = Path(inventory_df.row(0, named=True)['file_path'])
+    assert checkpoint_store.checkpoint_dir == (
+        tmp_path / 'processed' / 'checkpoints' / 'analysis_backend=birdnet'
+    )
     assert checkpoint_store.exists(audio_path) is True
 
     class FailingBirdNETModel:
@@ -524,5 +550,54 @@ def test_run_birdnet_analysis_writes_csv_when_enabled(
     )
 
     output_dir = get_birdnet_output_dir(config)
-    assert (output_dir / 'birdnet_detections.parquet').exists()
-    assert (output_dir / 'birdnet_detections.csv').exists()
+    dataset_dir = get_birdnet_detection_dataset_dir(config)
+    assert (
+        dataset_dir
+        / 'year=2026'
+        / 'month=04'
+        / 'day=17'
+        / 'detections.parquet'
+    ).exists()
+    assert (
+        dataset_dir
+        / 'year=2026'
+        / 'month=04'
+        / 'day=17'
+        / 'detections.csv'
+    ).exists()
+    assert not (output_dir / 'birdnet_detections.csv').exists()
+
+
+def test_load_detection_dataframe_reads_partitioned_dataset(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    dataset_dir = get_birdnet_detection_dataset_dir(config)
+    partition_dir = dataset_dir / 'year=2026' / 'month=04' / 'day=17'
+    partition_dir.mkdir(parents=True)
+
+    detections_df = pl.DataFrame(
+        [
+            {
+                'file_path': '/tmp/example.wav',
+                'file_name': 'example.wav',
+                'detection_start_s': 3.0,
+                'detection_end_s': 6.0,
+                'detection_duration_s': 3.0,
+                'detection_timestamp': '2026-04-17T22:35:44+00:00',
+                'timestamp': '2026-04-17T22:35:41+00:00',
+                'latitude': 50.432584,
+                'longitude': -3.672039,
+                'temperature_int_c': 18.5,
+                'scientific_name': 'Erithacus rubecula',
+                'common_name': 'European Robin',
+                'confidence': 0.876,
+                'analysis_backend': 'birdnet',
+                'model_name': 'acoustic-2.4-tf',
+                'source_result_path': None,
+            }
+        ]
+    )
+    detections_df.write_parquet(partition_dir / 'detections.parquet')
+
+    loaded_df = load_detection_dataframe(dataset_dir, schema=detections_df.schema)
+
+    assert loaded_df.to_dicts() == detections_df.to_dicts()
