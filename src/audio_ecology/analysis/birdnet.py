@@ -64,7 +64,11 @@ LocationSpeciesCache = dict[
 
 
 def get_birdnet_output_dir(config: PipelineConfig) -> Path:
-    """Return the directory used for BirdNET-specific auxiliary outputs."""
+    """Return the directory used for BirdNET-specific auxiliary outputs.
+
+    :param config: Loaded pipeline configuration.
+    :return: BirdNET auxiliary output directory.
+    """
     if config.birdnet.output_dir is not None:
         return config.birdnet.output_dir
     return config.output_dir / 'birdnet'
@@ -73,7 +77,11 @@ def get_birdnet_output_dir(config: PipelineConfig) -> Path:
 def get_birdnet_detection_dataset_dir(
     config: PipelineConfig,
 ) -> Path:
-    """Return the canonical shared detection dataset directory for BirdNET."""
+    """Return the canonical shared detection dataset directory for BirdNET.
+
+    :param config: Loaded pipeline configuration.
+    :return: Shared BirdNET detection dataset directory.
+    """
     return get_detection_dataset_dir(
         output_dir=config.output_dir,
         analysis_backend=BIRDNET_BACKEND,
@@ -83,7 +91,11 @@ def get_birdnet_detection_dataset_dir(
 def get_birdnet_checkpoint_store(
     config: PipelineConfig,
 ) -> AnalysisCheckpointStore:
-    """Return the checkpoint store used for BirdNET detections."""
+    """Return the checkpoint store used for BirdNET detections.
+
+    :param config: Loaded pipeline configuration.
+    :return: Configured BirdNET checkpoint store.
+    """
     return AnalysisCheckpointStore(
         output_dir=config.output_dir,
         backend_name=backend_partition_name(BIRDNET_BACKEND),
@@ -92,7 +104,11 @@ def get_birdnet_checkpoint_store(
 
 
 def birdnet_week_from_timestamp(timestamp: datetime | None) -> int | None:
-    """Map a timestamp to BirdNET's 1-48 four-weeks-per-month index."""
+    """Map a timestamp to BirdNET's 1-48 four-weeks-per-month index.
+
+    :param timestamp: Timestamp to map.
+    :return: BirdNET week index or ``None`` when timestamp is missing.
+    """
     if timestamp is None:
         return None
 
@@ -476,7 +492,14 @@ def write_birdnet_detection_outputs(
     dataset_dir: Path,
     write_csv: bool = False,
 ) -> tuple[Path, Path | None]:
-    """Write normalized BirdNET detections."""
+    """Write normalized BirdNET detections.
+
+    :param detections_df: Normalized BirdNET detection rows.
+    :param output_dir: BirdNET auxiliary output directory.
+    :param dataset_dir: Shared BirdNET detection dataset directory.
+    :param write_csv: Whether to also write a convenience CSV copy.
+    :return: Tuple of dataset directory and optional CSV path.
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
 
     csv_path = output_dir / f'{BIRDNET_DETECTIONS_STEM}.csv' if write_csv else None
@@ -718,7 +741,13 @@ def run_birdnet_analysis(
     inventory_df: pl.DataFrame,
     overwrite_checkpoints: bool = False,
 ) -> pl.DataFrame:
-    """Run BirdNET and return normalized detection records."""
+    """Run BirdNET and return normalized detection records.
+
+    :param config: Loaded pipeline configuration.
+    :param inventory_df: Inventory rows to analyse.
+    :param overwrite_checkpoints: Whether to ignore existing file checkpoints.
+    :return: Normalized BirdNET detection rows.
+    """
     output_dir = get_birdnet_output_dir(config)
     output_dir.mkdir(parents=True, exist_ok=True)
     detection_dataset_dir = get_birdnet_detection_dataset_dir(config)

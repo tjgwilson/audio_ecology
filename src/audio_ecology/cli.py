@@ -204,7 +204,15 @@ def detection_windows(
         ),
     ] = 'INFO',
 ) -> None:
-    """Aggregate detections into window-level noisy-OR evidence."""
+    """Aggregate detections into window-level noisy-OR evidence.
+
+    :param config_path: Path to the YAML configuration file.
+    :param detections_stem: Unused compatibility option for detection stem naming.
+    :param output_stem: Base file stem for window evidence outputs.
+    :param log_level: Logging level to use for the run.
+    :return: ``None``.
+    :raises typer.BadParameter: If required config values or detections are missing.
+    """
     config = load_config(config_path.resolve())
     if (
         config.detection_uncertainty.start_time is None

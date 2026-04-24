@@ -26,7 +26,10 @@ DEFAULT_CONFIG_PATH = SCRIPT_DIR / 'config_files' / 'wyke_lodge.yaml'
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments."""
+    """Parse command-line arguments.
+
+    :return: Parsed command-line arguments.
+    """
     parser = argparse.ArgumentParser(
         description='Aggregate detections into window-level evidence.'
     )
@@ -69,12 +72,21 @@ def parse_args() -> argparse.Namespace:
 
 
 def default_birdnet_detections_path(config) -> Path:
-    """Return the canonical BirdNET detections dataset path."""
+    """Return the canonical BirdNET detections dataset path.
+
+    :param config: Loaded pipeline configuration.
+    :return: BirdNET detection dataset directory.
+    """
     return get_birdnet_detection_dataset_dir(config)
 
 
 def resolve_detections_path(config, args: argparse.Namespace) -> Path:
-    """Resolve the detections parquet path for this evidence run."""
+    """Resolve the detections dataset path for this evidence run.
+
+    :param config: Loaded pipeline configuration.
+    :param args: Parsed command-line arguments.
+    :return: Detection dataset path to read.
+    """
     if args.detections_path is not None:
         return args.detections_path.resolve()
 
@@ -91,7 +103,13 @@ def resolve_detections_path(config, args: argparse.Namespace) -> Path:
 
 
 def resolve_output_dir(detections_path: Path, config, args: argparse.Namespace) -> Path:
-    """Resolve the output directory for evidence files."""
+    """Resolve the output directory for evidence files.
+
+    :param detections_path: Detection dataset path used for this run.
+    :param config: Loaded pipeline configuration.
+    :param args: Parsed command-line arguments.
+    :return: Output directory for evidence files.
+    """
     if args.output_dir is not None:
         return args.output_dir.resolve()
 
@@ -102,7 +120,12 @@ def resolve_output_dir(detections_path: Path, config, args: argparse.Namespace) 
 
 
 def resolve_output_stem(config, args: argparse.Namespace) -> str:
-    """Resolve the output stem for evidence files."""
+    """Resolve the output stem for evidence files.
+
+    :param config: Loaded pipeline configuration.
+    :param args: Parsed command-line arguments.
+    :return: Output file stem for evidence files.
+    """
     if args.output_stem is not None:
         return str(args.output_stem)
 
@@ -113,7 +136,12 @@ def resolve_output_stem(config, args: argparse.Namespace) -> str:
 
 
 def main() -> None:
-    """Run window-level detection uncertainty summaries."""
+    """Run window-level detection uncertainty summaries.
+
+    :return: ``None``.
+    :raises ValueError: If the configured window bounds are incomplete.
+    :raises FileNotFoundError: If the configured detection dataset does not exist.
+    """
     args = parse_args()
     config = load_config(args.config_path.resolve())
     uncertainty_config = config.detection_uncertainty
