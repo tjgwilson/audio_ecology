@@ -11,6 +11,8 @@ import typer
 from audio_ecology.analysis.birdnet import (
     BIRDNET_DETECTIONS_STEM,
     get_birdnet_output_dir,
+    load_detection_dataframe,
+    resolve_birdnet_detection_path,
     run_birdnet_analysis,
 )
 from audio_ecology.analysis.evidence import (
@@ -222,7 +224,10 @@ def detection_windows(
     detections_path = (
         config.detection_uncertainty.detections_path
         if config.detection_uncertainty.detections_path is not None
-        else birdnet_output_dir / f'{detections_stem}.parquet'
+        else resolve_birdnet_detection_path(
+            birdnet_output_dir,
+            stem=detections_stem,
+        )
     )
     if not detections_path.exists():
         raise typer.BadParameter(
@@ -230,7 +235,7 @@ def detection_windows(
             'Run the relevant detection stage first.'
         )
 
-    detections_df = pl.read_parquet(detections_path)
+    detections_df = load_detection_dataframe(detections_path)
     evidence_df = build_noisy_or_species_time_period(
         detections_df=detections_df,
         start_time=config.detection_uncertainty.start_time,

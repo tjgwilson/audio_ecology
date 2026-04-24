@@ -12,9 +12,13 @@ from audio_ecology.analysis.birdnet import (
     BIRDNET_BACKEND,
     birdnet_week_from_timestamp,
     get_birdnet_checkpoint_store,
+    get_birdnet_detection_dataset_dir,
+    get_birdnet_detection_legacy_path,
     get_birdnet_output_dir,
+    load_detection_dataframe,
     load_birdnet_model,
     normalise_birdnet_predictions,
+    resolve_birdnet_detection_path,
     run_birdnet_analysis,
     run_birdnet_predictions,
 )
@@ -524,5 +528,60 @@ def test_run_birdnet_analysis_writes_csv_when_enabled(
     )
 
     output_dir = get_birdnet_output_dir(config)
-    assert (output_dir / 'birdnet_detections.parquet').exists()
+    dataset_dir = get_birdnet_detection_dataset_dir(output_dir)
+    assert (
+        dataset_dir
+        / 'year=2026'
+        / 'month=04'
+        / 'day=17'
+        / 'birdnet_detections.parquet'
+    ).exists()
     assert (output_dir / 'birdnet_detections.csv').exists()
+
+
+def test_load_detection_dataframe_reads_partitioned_dataset(tmp_path: Path) -> None:
+    output_dir = tmp_path / 'processed' / 'birdnet'
+    dataset_dir = get_birdnet_detection_dataset_dir(output_dir)
+    partition_dir = dataset_dir / 'year=2026' / 'month=04' / 'day=17'
+    partition_dir.mkdir(parents=True)
+
+    detections_df = pl.DataFrame(
+        [
+            {
+                'file_path': '/tmp/example.wav',
+                'file_name': 'example.wav',
+                'detection_start_s': 3.0,
+                'detection_end_s': 6.0,
+                'detection_duration_s': 3.0,
+                'detection_timestamp': '2026-04-17T22:35:44+00:00',
+                'timestamp': '2026-04-17T22:35:41+00:00',
+                'latitude': 50.432584,
+                'longitude': -3.672039,
+                'temperature_int_c': 18.5,
+                'scientific_name': 'Erithacus rubecula',
+                'common_name': 'European Robin',
+                'confidence': 0.876,
+                'analysis_backend': 'birdnet',
+                'model_name': 'acoustic-2.4-tf',
+                'source_result_path': None,
+            }
+        ]
+    )
+    detections_df.write_parquet(partition_dir / 'birdnet_detections.parquet')
+
+    loaded_df = load_detection_dataframe(dataset_dir)
+
+    assert loaded_df.to_dicts() == detections_df.to_dicts()
+
+
+def test_resolve_birdnet_detection_path_prefers_dataset_dir(tmp_path: Path) -> None:
+    output_dir = tmp_path / 'processed' / 'birdnet'
+    dataset_dir = get_birdnet_detection_dataset_dir(output_dir)
+    dataset_dir.mkdir(parents=True)
+    legacy_path = get_birdnet_detection_legacy_path(output_dir)
+    legacy_path.parent.mkdir(parents=True, exist_ok=True)
+    legacy_path.write_text('legacy placeholder', encoding='utf-8')
+
+    resolved_path = resolve_birdnet_detection_path(output_dir)
+
+    assert resolved_path == dataset_dir
