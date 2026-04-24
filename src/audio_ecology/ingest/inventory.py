@@ -73,6 +73,7 @@ def chunk_records_to_polars(records: list[AudioChunkRecord]) -> pl.DataFrame:
                 'device_label': pl.Utf8,
                 'deployment_id': pl.Utf8,
                 'habitat_label': pl.Utf8,
+                'detection_targets': pl.List(pl.Utf8),
                 'chunk_index': pl.Int64,
                 'chunk_start_s': pl.Float64,
                 'chunk_end_s': pl.Float64,
@@ -153,7 +154,8 @@ def write_chunk_inventory_outputs(
     if csv_path is not None:
         logger.info('Writing chunk inventory CSV to %s', csv_path)
         chunk_df_for_csv = chunk_df.with_columns(
-            pl.col('analysis_targets').list.join(';').alias('analysis_targets')
+            pl.col('analysis_targets').list.join(';').alias('analysis_targets'),
+            pl.col('detection_targets').list.join(';').alias('detection_targets'),
         )
         chunk_df_for_csv.write_csv(csv_path)
     logger.info('Wrote chunk inventory outputs with %d rows', chunk_df.height)

@@ -31,6 +31,7 @@ class DeploymentConfig(BaseModel):
 
     device_id: str
     habitat_label: str | None = None
+    detection_targets: list[str] = Field(default_factory=list)
     fallback_location: LocationConfig | None = None
 
 

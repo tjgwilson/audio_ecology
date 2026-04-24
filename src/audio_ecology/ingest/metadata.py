@@ -198,15 +198,23 @@ def resolve_location(
     guano_latitude: float | None,
     guano_longitude: float | None,
     config: PipelineConfig,
-) -> tuple[float | None, float | None, str, str | None, str | None, str | None]:
+) -> tuple[
+    float | None,
+    float | None,
+    str,
+    str | None,
+    str | None,
+    str | None,
+    list[str],
+]:
     """Resolve final location using GUANO first, then config fallbacks.
 
     :param device_id: Parsed device ID.
     :param guano_latitude: Latitude from GUANO.
     :param guano_longitude: Longitude from GUANO.
     :param config: Pipeline configuration.
-    :return: Latitude, longitude, source, device label, deployment ID, and
-        habitat label.
+    :return: Latitude, longitude, source, device label, deployment ID, habitat
+        label, and deployment detection targets.
     """
     device_label: str | None = None
     deployment_id, deployment_config = resolve_deployment(
@@ -215,6 +223,11 @@ def resolve_location(
     )
     habitat_label = (
         deployment_config.habitat_label if deployment_config is not None else None
+    )
+    detection_targets = (
+        list(deployment_config.detection_targets)
+        if deployment_config is not None
+        else []
     )
 
     if device_id is not None and device_id in config.devices:
@@ -228,6 +241,7 @@ def resolve_location(
             device_label,
             deployment_id,
             habitat_label,
+            detection_targets,
         )
 
     if (
@@ -243,6 +257,7 @@ def resolve_location(
             device_label,
             deployment_id,
             habitat_label,
+            detection_targets,
         )
 
     if device_id is not None and device_id in config.devices:
@@ -261,6 +276,7 @@ def resolve_location(
                 device_label,
                 deployment_id,
                 habitat_label,
+                detection_targets,
             )
 
     if (
@@ -275,6 +291,7 @@ def resolve_location(
             device_label,
             deployment_id,
             habitat_label,
+            detection_targets,
         )
 
     return (
@@ -284,6 +301,7 @@ def resolve_location(
         device_label,
         deployment_id,
         habitat_label,
+        detection_targets,
     )
 
 
@@ -330,6 +348,7 @@ def build_audio_file_record(
         device_label,
         deployment_id,
         habitat_label,
+        detection_targets,
     ) = resolve_location(
         device_id=device_id,
         guano_latitude=guano_latitude,
@@ -351,6 +370,7 @@ def build_audio_file_record(
         device_label=device_label,
         deployment_id=deployment_id,
         habitat_label=habitat_label,
+        detection_targets=detection_targets,
         timestamp=timestamp,
         timestamp_source=timestamp_source,
         filename_timestamp=filename_timestamp,

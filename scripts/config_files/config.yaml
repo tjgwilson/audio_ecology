@@ -24,6 +24,8 @@ deployments:
   canny_woods_spring_2026_a:
     device_id: 24F319046907737B
     habitat_label: mixed_woodland
+    detection_targets:
+      - bird
     fallback_location:
       latitude: 50.432584
       longitude: -3.672039
@@ -31,6 +33,8 @@ deployments:
   canny_woods_spring_2026_b:
     device_id: 24F319046907737C
     habitat_label: woodland_edge
+    detection_targets:
+      - bird
 
 chunking:
   enabled: false

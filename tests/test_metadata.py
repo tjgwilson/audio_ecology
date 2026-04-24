@@ -49,6 +49,7 @@ def make_config(tmp_path: Path) -> PipelineConfig:
             'wyke_woods_spring_2026': DeploymentConfig(
                 device_id='24F319046907737B',
                 habitat_label='mixed_woodland',
+                detection_targets=['bird', 'bat'],
                 fallback_location=LocationConfig(
                     latitude=50.432584,
                     longitude=-3.672039,
@@ -91,6 +92,7 @@ def test_build_audio_file_record_uses_guano_timestamp_and_location(
     assert record.device_label == 'am_1'
     assert record.deployment_id == 'wyke_woods_spring_2026'
     assert record.habitat_label == 'mixed_woodland'
+    assert record.detection_targets == ['bird', 'bat']
     assert record.timestamp == datetime(
         2026, 4, 16, 21, 43, 0, tzinfo=timezone.utc
     )
@@ -125,6 +127,7 @@ def test_build_audio_file_record_falls_back_to_filename_timestamp_and_device_loc
     assert record.location_source == LOCATION_SOURCE_DEPLOYMENT_CONFIG
     assert record.deployment_id == 'wyke_woods_spring_2026'
     assert record.habitat_label == 'mixed_woodland'
+    assert record.detection_targets == ['bird', 'bat']
     assert record.temperature_int_c is None
 
 
@@ -145,6 +148,7 @@ def test_build_audio_file_record_falls_back_to_device_location_without_deploymen
     assert record.location_source == LOCATION_SOURCE_DEVICE_CONFIG
     assert record.deployment_id is None
     assert record.habitat_label is None
+    assert record.detection_targets == []
 
 
 def test_build_audio_file_record_falls_back_to_site_location(

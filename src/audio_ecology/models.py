@@ -27,6 +27,7 @@ class AudioFileRecord(BaseModel):
     device_label: str | None = None
     deployment_id: str | None = None
     habitat_label: str | None = None
+    detection_targets: list[str] = Field(default_factory=list)
 
     timestamp: datetime | None = None
     timestamp_source: TimestampSource = 'missing'
@@ -57,6 +58,7 @@ class AudioChunkRecord(BaseModel):
     device_label: str | None = None
     deployment_id: str | None = None
     habitat_label: str | None = None
+    detection_targets: list[str] = Field(default_factory=list)
 
     chunk_index: int
     chunk_start_s: float
@@ -93,6 +95,7 @@ class BirdDetectionRecord(BaseModel):
     temperature_int_c: float | None = None
     deployment_id: str | None = None
     habitat_label: str | None = None
+    detection_targets: list[str] = Field(default_factory=list)
 
     scientific_name: str
     common_name: str

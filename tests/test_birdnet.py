@@ -117,6 +117,7 @@ def make_config(tmp_path: Path) -> PipelineConfig:
             'test_site_deployment': DeploymentConfig(
                 device_id='24F319046907737B',
                 habitat_label='mixed_woodland',
+                detection_targets=['bird', 'bat'],
                 fallback_location=LocationConfig(
                     latitude=50.432584,
                     longitude=-3.672039,
@@ -150,6 +151,7 @@ def make_inventory_df(tmp_path: Path) -> pl.DataFrame:
                 ),
                 'deployment_id': 'test_site_deployment',
                 'habitat_label': 'mixed_woodland',
+                'detection_targets': ['bird', 'bat'],
                 'latitude': 50.432584,
                 'longitude': -3.672039,
                 'temperature_int_c': 18.5,
@@ -476,6 +478,7 @@ def test_normalise_birdnet_predictions_adds_inventory_metadata_and_temperature(
     assert detection['temperature_int_c'] == 18.5
     assert detection['deployment_id'] == 'test_site_deployment'
     assert detection['habitat_label'] == 'mixed_woodland'
+    assert detection['detection_targets'] == ['bird', 'bat']
     assert detection['analysis_backend'] == BIRDNET_BACKEND
     assert detection['model_name'] == 'acoustic-2.4-tf'
 
