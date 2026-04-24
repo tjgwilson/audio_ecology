@@ -10,11 +10,11 @@ import typer
 
 from audio_ecology.analysis.birdnet import (
     BIRDNET_DETECTIONS_STEM,
-    get_birdnet_output_dir,
-    load_detection_dataframe,
-    resolve_birdnet_detection_path,
+    BIRDNET_DETECTION_SCHEMA,
+    get_birdnet_detection_dataset_dir,
     run_birdnet_analysis,
 )
+from audio_ecology.analysis.storage import load_detection_dataframe
 from audio_ecology.analysis.evidence import (
     DETECTION_WINDOW_EVIDENCE_STEM,
     build_noisy_or_species_time_period,
@@ -168,7 +168,7 @@ def birds(
 
     typer.echo(
         f'Wrote BirdNET detections with {detections_df.height} rows to '
-        f'{get_birdnet_output_dir(config)}'
+        f'{get_birdnet_detection_dataset_dir(config)}'
     )
     if profile_paths is not None:
         typer.echo(f'Wrote profile reports to {profile_paths[0].parent}')
@@ -220,14 +220,10 @@ def detection_windows(
         level=log_level,
         run_name='detection_windows',
     )
-    birdnet_output_dir = get_birdnet_output_dir(config)
     detections_path = (
         config.detection_uncertainty.detections_path
         if config.detection_uncertainty.detections_path is not None
-        else resolve_birdnet_detection_path(
-            birdnet_output_dir,
-            stem=detections_stem,
-        )
+        else get_birdnet_detection_dataset_dir(config)
     )
     if not detections_path.exists():
         raise typer.BadParameter(
@@ -235,7 +231,10 @@ def detection_windows(
             'Run the relevant detection stage first.'
         )
 
-    detections_df = load_detection_dataframe(detections_path)
+    detections_df = load_detection_dataframe(
+        detections_path,
+        schema=BIRDNET_DETECTION_SCHEMA,
+    )
     evidence_df = build_noisy_or_species_time_period(
         detections_df=detections_df,
         start_time=config.detection_uncertainty.start_time,
@@ -251,7 +250,7 @@ def detection_windows(
 
     typer.echo(
         f'Wrote window evidence with {evidence_df.height} rows to '
-        f'{birdnet_output_dir}'
+        f'{detections_path}'
     )
     if log_file_path is not None:
         typer.echo(f'Wrote log to {log_file_path}')

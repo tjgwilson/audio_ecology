@@ -8,12 +8,16 @@ from pathlib import Path
 
 import polars as pl
 
-from audio_ecology.analysis.birdnet import get_birdnet_output_dir
+from audio_ecology.analysis.birdnet import (
+    BIRDNET_DETECTION_SCHEMA,
+    get_birdnet_detection_dataset_dir,
+)
 from audio_ecology.analysis.evidence import (
     DETECTION_WINDOW_EVIDENCE_STEM,
     build_noisy_or_species_time_period,
     write_noisy_or_species_windows,
 )
+from audio_ecology.analysis.storage import load_detection_dataframe
 from audio_ecology.config import load_config
 from audio_ecology.logging_config import configure_pipeline_logging
 
@@ -65,8 +69,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def default_birdnet_detections_path(config) -> Path:
-    """Return the current BirdNET detections path as a compatibility fallback."""
-    return get_birdnet_output_dir(config) / 'birdnet_detections.parquet'
+    """Return the canonical BirdNET detections dataset path."""
+    return get_birdnet_detection_dataset_dir(config)
 
 
 def resolve_detections_path(config, args: argparse.Namespace) -> Path:
@@ -142,7 +146,10 @@ def main() -> None:
             'detection_uncertainty.detections_path.'
         )
 
-    detections_df = pl.read_parquet(detections_path)
+    detections_df = load_detection_dataframe(
+        detections_path,
+        schema=BIRDNET_DETECTION_SCHEMA,
+    )
     evidence_df = build_noisy_or_species_time_period(
         detections_df=detections_df,
         start_time=uncertainty_config.start_time,

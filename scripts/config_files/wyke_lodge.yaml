@@ -51,7 +51,7 @@ birdnet:
   overlap_s: 0.0
 
 detection_uncertainty:
-  detections_path: data/processed/Wyke_lodge/birdnet/birdnet_detections.parquet
+  detections_path: data/processed/Wyke_lodge/detections/analysis_backend=birdnet
   output_dir: data/processed/Wyke_lodge/detection_uncertainty
   output_stem: detection_window_evidence
   start_time: "2026-04-20T12:35:00+00:00"

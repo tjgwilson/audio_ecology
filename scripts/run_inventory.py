@@ -14,7 +14,7 @@ from audio_ecology.ingest.inventory import (
 from audio_ecology.logging_config import configure_pipeline_logging
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_CONFIG_PATH = SCRIPT_DIR / 'config_files' / 'config.yaml'
+DEFAULT_CONFIG_PATH = SCRIPT_DIR / 'config_files' / 'wyke_lodge.yaml'
 
 
 def parse_args() -> argparse.Namespace:

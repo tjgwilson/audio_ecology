@@ -12,6 +12,13 @@ from typing import Any
 import polars as pl
 
 from audio_ecology.analysis.checkpointing import AnalysisCheckpointStore
+from audio_ecology.analysis.storage import (
+    DETECTIONS_STEM,
+    backend_partition_name,
+    get_detection_dataset_dir,
+    load_detection_dataframe,
+    write_detection_dataset,
+)
 from audio_ecology.config import PipelineConfig
 from audio_ecology.models import BirdDetectionRecord
 
@@ -57,37 +64,20 @@ LocationSpeciesCache = dict[
 
 
 def get_birdnet_output_dir(config: PipelineConfig) -> Path:
-    """Return the directory used for normalized BirdNET outputs."""
+    """Return the directory used for BirdNET-specific auxiliary outputs."""
     if config.birdnet.output_dir is not None:
         return config.birdnet.output_dir
     return config.output_dir / 'birdnet'
 
 
 def get_birdnet_detection_dataset_dir(
-    output_dir: Path,
-    stem: str = BIRDNET_DETECTIONS_STEM,
+    config: PipelineConfig,
 ) -> Path:
-    """Return the hive-style dataset directory for normalized detections."""
-    return output_dir / stem
-
-
-def get_birdnet_detection_legacy_path(
-    output_dir: Path,
-    stem: str = BIRDNET_DETECTIONS_STEM,
-) -> Path:
-    """Return the legacy single-parquet detection output path."""
-    return output_dir / f'{stem}.parquet'
-
-
-def resolve_birdnet_detection_path(
-    output_dir: Path,
-    stem: str = BIRDNET_DETECTIONS_STEM,
-) -> Path:
-    """Resolve the most appropriate detection output path for reading."""
-    dataset_dir = get_birdnet_detection_dataset_dir(output_dir, stem=stem)
-    if dataset_dir.exists():
-        return dataset_dir
-    return get_birdnet_detection_legacy_path(output_dir, stem=stem)
+    """Return the canonical shared detection dataset directory for BirdNET."""
+    return get_detection_dataset_dir(
+        output_dir=config.output_dir,
+        analysis_backend=BIRDNET_BACKEND,
+    )
 
 
 def get_birdnet_checkpoint_store(
@@ -95,8 +85,8 @@ def get_birdnet_checkpoint_store(
 ) -> AnalysisCheckpointStore:
     """Return the checkpoint store used for BirdNET detections."""
     return AnalysisCheckpointStore(
-        output_dir=get_birdnet_output_dir(config),
-        backend_name=BIRDNET_BACKEND,
+        output_dir=config.output_dir,
+        backend_name=backend_partition_name(BIRDNET_BACKEND),
         schema=BIRDNET_DETECTION_SCHEMA,
     )
 
@@ -480,89 +470,22 @@ def normalise_birdnet_predictions(
     return detections_df
 
 
-def _partition_date_from_row(detection_row: dict[str, object]) -> str:
-    """Return a YYYY-MM-DD partition key for one detection row."""
-    for field_name in ('detection_timestamp', 'timestamp'):
-        timestamp_value = detection_row.get(field_name)
-        if timestamp_value is None:
-            continue
-
-        timestamp_text = str(timestamp_value)
-        try:
-            return datetime.fromisoformat(timestamp_text).date().isoformat()
-        except ValueError:
-            logger.debug(
-                'Could not parse detection timestamp %s for partitioning',
-                timestamp_text,
-            )
-
-    return 'unknown'
-
-
-def _partition_dir_for_date(dataset_dir: Path, partition_date: str) -> Path:
-    """Return the hive-style partition directory for one date."""
-    if partition_date == 'unknown':
-        return dataset_dir / 'date=unknown'
-
-    year, month, day = partition_date.split('-')
-    return dataset_dir / f'year={year}' / f'month={month}' / f'day={day}'
-
-
-def load_detection_dataframe(
-    detections_path: Path,
-    schema: dict[str, pl.DataType] = BIRDNET_DETECTION_SCHEMA,
-) -> pl.DataFrame:
-    """Load detections from either a legacy parquet file or a partitioned dataset."""
-    if detections_path.is_file():
-        return pl.read_parquet(detections_path)
-
-    if detections_path.is_dir():
-        parquet_paths = sorted(detections_path.rglob('*.parquet'))
-        if not parquet_paths:
-            logger.info('No parquet files found in detection dataset %s', detections_path)
-            return pl.DataFrame(schema=schema)
-        return pl.read_parquet([str(path) for path in parquet_paths])
-
-    raise FileNotFoundError(f'Detections parquet not found: {detections_path}')
-
-
 def write_birdnet_detection_outputs(
     detections_df: pl.DataFrame,
     output_dir: Path,
-    stem: str = BIRDNET_DETECTIONS_STEM,
+    dataset_dir: Path,
     write_csv: bool = False,
 ) -> tuple[Path, Path | None]:
     """Write normalized BirdNET detections."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    dataset_dir = get_birdnet_detection_dataset_dir(output_dir, stem=stem)
-    csv_path = output_dir / f'{stem}.csv' if write_csv else None
+    csv_path = output_dir / f'{BIRDNET_DETECTIONS_STEM}.csv' if write_csv else None
 
-    logger.info('Writing BirdNET detections parquet dataset to %s', dataset_dir)
-    if detections_df.is_empty():
-        dataset_dir.mkdir(parents=True, exist_ok=True)
-    else:
-        detections_by_date: dict[str, list[dict[str, object]]] = {}
-        for detection_row in detections_df.iter_rows(named=True):
-            partition_date = _partition_date_from_row(detection_row)
-            detections_by_date.setdefault(partition_date, []).append(detection_row)
-
-        for partition_date, partition_rows in sorted(detections_by_date.items()):
-            partition_dir = _partition_dir_for_date(dataset_dir, partition_date)
-            partition_dir.mkdir(parents=True, exist_ok=True)
-            partition_path = partition_dir / f'{stem}.parquet'
-            partition_df = pl.DataFrame(
-                partition_rows,
-                schema=detections_df.schema,
-            )
-            logger.info(
-                'Writing %d BirdNET detections for %s to %s',
-                partition_df.height,
-                partition_date,
-                partition_path,
-            )
-            partition_df.write_parquet(partition_path)
-
+    write_detection_dataset(
+        detections_df=detections_df,
+        dataset_dir=dataset_dir,
+        stem=DETECTIONS_STEM,
+    )
     if csv_path is not None:
         logger.info('Writing BirdNET detections CSV to %s', csv_path)
         detections_df.write_csv(csv_path)
@@ -798,6 +721,8 @@ def run_birdnet_analysis(
     """Run BirdNET and return normalized detection records."""
     output_dir = get_birdnet_output_dir(config)
     output_dir.mkdir(parents=True, exist_ok=True)
+    detection_dataset_dir = get_birdnet_detection_dataset_dir(config)
+    detection_dataset_dir.mkdir(parents=True, exist_ok=True)
     logger.info('Starting BirdNET analysis')
 
     checkpoint_store = get_birdnet_checkpoint_store(config)
@@ -875,6 +800,7 @@ def run_birdnet_analysis(
     write_birdnet_detection_outputs(
         detections_df=detections_df,
         output_dir=output_dir,
+        dataset_dir=detection_dataset_dir,
         write_csv=config.outputs.write_csv,
     )
     logger.info('Finished BirdNET analysis')

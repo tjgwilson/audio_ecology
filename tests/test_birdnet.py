@@ -13,15 +13,13 @@ from audio_ecology.analysis.birdnet import (
     birdnet_week_from_timestamp,
     get_birdnet_checkpoint_store,
     get_birdnet_detection_dataset_dir,
-    get_birdnet_detection_legacy_path,
     get_birdnet_output_dir,
-    load_detection_dataframe,
     load_birdnet_model,
     normalise_birdnet_predictions,
-    resolve_birdnet_detection_path,
     run_birdnet_analysis,
     run_birdnet_predictions,
 )
+from audio_ecology.analysis.storage import load_detection_dataframe
 from audio_ecology.config import (
     BirdNETConfig,
     LocationConfig,
@@ -490,6 +488,9 @@ def test_run_birdnet_analysis_writes_and_reuses_checkpoints(
 
     checkpoint_store = get_birdnet_checkpoint_store(config)
     audio_path = Path(inventory_df.row(0, named=True)['file_path'])
+    assert checkpoint_store.checkpoint_dir == (
+        tmp_path / 'processed' / 'checkpoints' / 'analysis_backend=birdnet'
+    )
     assert checkpoint_store.exists(audio_path) is True
 
     class FailingBirdNETModel:
@@ -528,9 +529,16 @@ def test_run_birdnet_analysis_writes_csv_when_enabled(
     )
 
     output_dir = get_birdnet_output_dir(config)
-    dataset_dir = get_birdnet_detection_dataset_dir(output_dir)
+    dataset_dir = get_birdnet_detection_dataset_dir(config)
     assert (
         dataset_dir
+        / 'year=2026'
+        / 'month=04'
+        / 'day=17'
+        / 'detections.parquet'
+    ).exists()
+    assert not (
+        output_dir
         / 'year=2026'
         / 'month=04'
         / 'day=17'
@@ -540,8 +548,8 @@ def test_run_birdnet_analysis_writes_csv_when_enabled(
 
 
 def test_load_detection_dataframe_reads_partitioned_dataset(tmp_path: Path) -> None:
-    output_dir = tmp_path / 'processed' / 'birdnet'
-    dataset_dir = get_birdnet_detection_dataset_dir(output_dir)
+    config = make_config(tmp_path)
+    dataset_dir = get_birdnet_detection_dataset_dir(config)
     partition_dir = dataset_dir / 'year=2026' / 'month=04' / 'day=17'
     partition_dir.mkdir(parents=True)
 
@@ -567,21 +575,8 @@ def test_load_detection_dataframe_reads_partitioned_dataset(tmp_path: Path) -> N
             }
         ]
     )
-    detections_df.write_parquet(partition_dir / 'birdnet_detections.parquet')
+    detections_df.write_parquet(partition_dir / 'detections.parquet')
 
-    loaded_df = load_detection_dataframe(dataset_dir)
+    loaded_df = load_detection_dataframe(dataset_dir, schema=detections_df.schema)
 
     assert loaded_df.to_dicts() == detections_df.to_dicts()
-
-
-def test_resolve_birdnet_detection_path_prefers_dataset_dir(tmp_path: Path) -> None:
-    output_dir = tmp_path / 'processed' / 'birdnet'
-    dataset_dir = get_birdnet_detection_dataset_dir(output_dir)
-    dataset_dir.mkdir(parents=True)
-    legacy_path = get_birdnet_detection_legacy_path(output_dir)
-    legacy_path.parent.mkdir(parents=True, exist_ok=True)
-    legacy_path.write_text('legacy placeholder', encoding='utf-8')
-
-    resolved_path = resolve_birdnet_detection_path(output_dir)
-
-    assert resolved_path == dataset_dir

@@ -47,7 +47,7 @@ birdnet:
   overlap_s: 0.0
 
 detection_uncertainty:
-  detections_path: data/processed/birdnet/birdnet_detections.parquet
+  detections_path: data/processed/detections/analysis_backend=birdnet
   output_dir: data/processed/detection_uncertainty
   output_stem: detection_window_evidence
   start_time: "2026-04-20T12:35:11+00:00"
