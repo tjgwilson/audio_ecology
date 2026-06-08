@@ -8,6 +8,8 @@ from audio_ecology.config import LocationConfig, OutputConfig, PipelineConfig
 from audio_ecology.ingest.inventory import (
     build_and_write_inventory,
     build_inventory_records,
+    merge_chunk_inventory_dataframes,
+    merge_inventory_dataframes,
     records_to_polars,
     write_inventory_outputs,
 )
@@ -104,3 +106,128 @@ def test_write_inventory_outputs_writes_csv_when_enabled(tmp_path: Path) -> None
     assert parquet_path.exists()
     assert csv_path is not None
     assert csv_path.exists()
+
+
+def test_write_inventory_outputs_merges_with_existing_inventory(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / 'processed'
+    first_df = pl.DataFrame(
+        [
+            {
+                'file_path': 'raw/device_a_20260417_220000.WAV',
+                'file_name': 'device_a_20260417_220000.WAV',
+                'deployment_id': 'north',
+                'detection_targets': ['bird'],
+                'latitude': 51.5001,
+                'longitude': -2.1001,
+            }
+        ]
+    )
+    second_df = pl.DataFrame(
+        [
+            {
+                'file_path': 'raw/device_b_20260417_221000.WAV',
+                'file_name': 'device_b_20260417_221000.WAV',
+                'deployment_id': 'south',
+                'detection_targets': ['bat'],
+                'latitude': 51.6001,
+                'longitude': -2.2001,
+            }
+        ]
+    )
+
+    write_inventory_outputs(first_df, output_dir)
+    write_inventory_outputs(second_df, output_dir)
+
+    merged_df = pl.read_parquet(output_dir / 'audio_inventory.parquet')
+
+    assert merged_df.height == 2
+    assert set(merged_df['deployment_id'].to_list()) == {'north', 'south'}
+    assert merged_df.select(['file_name', 'latitude', 'longitude']).to_dicts() == [
+        {
+            'file_name': 'device_a_20260417_220000.WAV',
+            'latitude': 51.5001,
+            'longitude': -2.1001,
+        },
+        {
+            'file_name': 'device_b_20260417_221000.WAV',
+            'latitude': 51.6001,
+            'longitude': -2.2001,
+        },
+    ]
+
+
+def test_merge_inventory_dataframes_keeps_latest_duplicate_file() -> None:
+    existing_df = pl.DataFrame(
+        [
+            {
+                'file_path': 'raw/device_a_20260417_220000.WAV',
+                'file_name': 'device_a_20260417_220000.WAV',
+                'deployment_id': 'north',
+                'detection_targets': ['bird'],
+                'latitude': 51.5001,
+                'longitude': -2.1001,
+            }
+        ]
+    )
+    incoming_df = pl.DataFrame(
+        [
+            {
+                'file_path': 'raw/device_a_20260417_220000.WAV',
+                'file_name': 'device_a_20260417_220000.WAV',
+                'deployment_id': 'north_updated',
+                'detection_targets': ['bird', 'bat'],
+                'latitude': 51.5002,
+                'longitude': -2.1002,
+            }
+        ]
+    )
+
+    merged_df = merge_inventory_dataframes(existing_df, incoming_df)
+
+    assert merged_df.height == 1
+    assert merged_df.to_dicts() == [
+        {
+            'file_path': 'raw/device_a_20260417_220000.WAV',
+            'file_name': 'device_a_20260417_220000.WAV',
+            'deployment_id': 'north_updated',
+            'detection_targets': ['bird', 'bat'],
+            'latitude': 51.5002,
+            'longitude': -2.1002,
+        }
+    ]
+
+
+def test_merge_chunk_inventory_dataframes_keeps_latest_duplicate_chunk() -> None:
+    existing_df = pl.DataFrame(
+        [
+            {
+                'parent_file_path': 'raw/device_a_20260417_220000.WAV',
+                'parent_file_name': 'device_a_20260417_220000.WAV',
+                'chunk_file_path': 'chunks/chunk0.wav',
+                'chunk_index': 0,
+                'chunk_start_s': 0.0,
+                'chunk_end_s': 3.0,
+                'chunk_duration_s': 3.0,
+            }
+        ]
+    )
+    incoming_df = pl.DataFrame(
+        [
+            {
+                'parent_file_path': 'raw/device_a_20260417_220000.WAV',
+                'parent_file_name': 'device_a_20260417_220000.WAV',
+                'chunk_file_path': 'chunks/chunk0_rebuilt.wav',
+                'chunk_index': 0,
+                'chunk_start_s': 0.0,
+                'chunk_end_s': 3.0,
+                'chunk_duration_s': 3.0,
+            }
+        ]
+    )
+
+    merged_df = merge_chunk_inventory_dataframes(existing_df, incoming_df)
+
+    assert merged_df.height == 1
+    assert merged_df['chunk_file_path'].to_list() == ['chunks/chunk0_rebuilt.wav']

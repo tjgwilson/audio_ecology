@@ -22,7 +22,7 @@ from audio_ecology.config import load_config
 from audio_ecology.logging_config import configure_pipeline_logging
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_CONFIG_PATH = SCRIPT_DIR / 'config_files' / 'wyke_lodge.yaml'
+DEFAULT_CONFIG_PATH = SCRIPT_DIR / '../data/raw/Strathdon/bats/config.yaml'
 
 
 def parse_args() -> argparse.Namespace:

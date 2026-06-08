@@ -21,6 +21,54 @@ from audio_ecology.models import AudioChunkRecord, AudioFileRecord
 logger = logging.getLogger(__name__)
 
 
+def merge_inventory_dataframes(
+    existing_df: pl.DataFrame,
+    incoming_df: pl.DataFrame,
+) -> pl.DataFrame:
+    """Merge inventory rows and keep the latest version of each file record.
+
+    :param existing_df: Previously written inventory rows.
+    :param incoming_df: Newly built inventory rows.
+    :return: Combined inventory with duplicate files collapsed.
+    """
+    if existing_df.is_empty():
+        return incoming_df
+
+    if incoming_df.is_empty():
+        return existing_df
+
+    return pl.concat(
+        [existing_df, incoming_df],
+        how='diagonal_relaxed',
+    ).unique(subset=['file_name'], keep='last', maintain_order=True)
+
+
+def merge_chunk_inventory_dataframes(
+    existing_df: pl.DataFrame,
+    incoming_df: pl.DataFrame,
+) -> pl.DataFrame:
+    """Merge chunk inventory rows and keep the latest chunk per source file.
+
+    :param existing_df: Previously written chunk inventory rows.
+    :param incoming_df: Newly built chunk inventory rows.
+    :return: Combined chunk inventory with duplicate chunks collapsed.
+    """
+    if existing_df.is_empty():
+        return incoming_df
+
+    if incoming_df.is_empty():
+        return existing_df
+
+    return pl.concat(
+        [existing_df, incoming_df],
+        how='diagonal_relaxed',
+    ).unique(
+        subset=['parent_file_name', 'chunk_index'],
+        keep='last',
+        maintain_order=True,
+    )
+
+
 def build_inventory_records(config: PipelineConfig) -> list[AudioFileRecord]:
     """Build inventory records for all WAV files in a directory tree.
 
@@ -125,12 +173,20 @@ def write_inventory_outputs(
     parquet_path = output_dir / f'{stem}.parquet'
     csv_path = output_dir / f'{stem}.csv' if write_csv else None
 
+    merged_inventory_df = inventory_df
+    if parquet_path.exists():
+        logger.info('Merging inventory parquet with existing rows from %s', parquet_path)
+        merged_inventory_df = merge_inventory_dataframes(
+            existing_df=pl.read_parquet(parquet_path),
+            incoming_df=inventory_df,
+        )
+
     logger.info('Writing inventory parquet to %s', parquet_path)
-    inventory_df.write_parquet(parquet_path)
+    merged_inventory_df.write_parquet(parquet_path)
     if csv_path is not None:
         logger.info('Writing inventory CSV to %s', csv_path)
-        prepare_dataframe_for_csv(inventory_df).write_csv(csv_path)
-    logger.info('Wrote inventory outputs with %d rows', inventory_df.height)
+        prepare_dataframe_for_csv(merged_inventory_df).write_csv(csv_path)
+    logger.info('Wrote inventory outputs with %d rows', merged_inventory_df.height)
 
     return parquet_path, csv_path
 
@@ -154,13 +210,24 @@ def write_chunk_inventory_outputs(
     parquet_path = output_dir / f'{stem}.parquet'
     csv_path = output_dir / f'{stem}.csv' if write_csv else None
 
+    merged_chunk_df = chunk_df
+    if parquet_path.exists():
+        logger.info(
+            'Merging chunk inventory parquet with existing rows from %s',
+            parquet_path,
+        )
+        merged_chunk_df = merge_chunk_inventory_dataframes(
+            existing_df=pl.read_parquet(parquet_path),
+            incoming_df=chunk_df,
+        )
+
     logger.info('Writing chunk inventory parquet to %s', parquet_path)
-    chunk_df.write_parquet(parquet_path)
+    merged_chunk_df.write_parquet(parquet_path)
 
     if csv_path is not None:
         logger.info('Writing chunk inventory CSV to %s', csv_path)
-        prepare_dataframe_for_csv(chunk_df).write_csv(csv_path)
-    logger.info('Wrote chunk inventory outputs with %d rows', chunk_df.height)
+        prepare_dataframe_for_csv(merged_chunk_df).write_csv(csv_path)
+    logger.info('Wrote chunk inventory outputs with %d rows', merged_chunk_df.height)
 
     return parquet_path, csv_path
 
@@ -195,12 +262,13 @@ def build_and_write_inventory_with_chunks(
     logger.info('Starting inventory build for %s', config.input_dir)
     records = build_inventory_records(config)
     inventory_df = records_to_polars(records)
-    write_inventory_outputs(
+    inventory_parquet_path, _ = write_inventory_outputs(
         inventory_df=inventory_df,
         output_dir=config.output_dir,
         stem=stem,
         write_csv=config.outputs.write_csv,
     )
+    inventory_df = pl.read_parquet(inventory_parquet_path)
 
     chunk_df: pl.DataFrame | None = None
     if config.chunking.enabled:
@@ -219,12 +287,13 @@ def build_and_write_inventory_with_chunks(
 
         if config.chunking.write_chunk_inventory:
             chunk_df = chunk_records_to_polars(chunk_records)
-            write_chunk_inventory_outputs(
+            chunk_parquet_path, _ = write_chunk_inventory_outputs(
                 chunk_df=chunk_df,
                 output_dir=config.output_dir,
                 stem='audio_chunks',
                 write_csv=config.outputs.write_csv,
             )
+            chunk_df = pl.read_parquet(chunk_parquet_path)
     else:
         logger.info('Chunking is disabled')
 
